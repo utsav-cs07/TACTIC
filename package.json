@@ -1,0 +1,32 @@
+{
+  "name": "nexus-ai-productivity-companion",
+  "version": "1.0.0",
+  "description": "AI-powered productivity companion with Firebase database, Google Calendar sync, voice input, habit tracking, and intelligent task prioritization.",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve . -p 3000",
+    "dev": "npx serve . -p 3000 --cors",
+    "build": "node build.js",
+    "deploy:netlify": "netlify deploy --dir . --prod",
+    "deploy:vercel": "vercel --prod"
+  },
+  "keywords": [
+    "productivity",
+    "ai",
+    "task-manager",
+    "google-calendar",
+    "firebase",
+    "hackathon"
+  ],
+  "author": "NEXUS AI Team",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.0.0"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions",
+    "last 2 Edge versions"
+  ]
+}

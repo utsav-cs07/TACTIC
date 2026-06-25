@@ -1,0 +1,52 @@
+# Dependency directories
+node_modules/
+.npm/
+
+# Environment & secrets — NEVER commit these
+.env
+.env.local
+.env.production
+*.env
+env.js
+
+# Build outputs
+dist/
+build/
+.cache/
+.parcel-cache/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Editor & IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+.firebaserc
+
+# Netlify
+.netlify/
+
+# Temporary files
+*.tmp
+*.temp

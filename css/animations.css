@@ -1,0 +1,162 @@
+/* ═══════════════════════════════════════════
+   ANIMATIONS — KEYFRAMES & MOTION
+═══════════════════════════════════════════ */
+
+/* ── Orb Pulse ── */
+@keyframes orb-pulse {
+  0%, 100% { box-shadow: 0 0 15px rgba(0, 212, 255, 0.3), 0 0 40px rgba(0, 212, 255, 0.1); }
+  50%       { box-shadow: 0 0 25px rgba(168, 85, 247, 0.5), 0 0 60px rgba(168, 85, 247, 0.2); }
+}
+
+/* ── Spin Orb ── */
+@keyframes spin-orb {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Pulse Dot ── */
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.4); opacity: 0.7; }
+}
+
+/* ── Typing Dot ── */
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0);   opacity: 0.4; }
+  30%            { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── Shimmer ── */
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* ── View Enter ── */
+@keyframes view-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Message Enter ── */
+@keyframes msg-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Toast Enter ── */
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Fade In ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Slide Up ── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scale In ── */
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Flame Flicker ── */
+@keyframes flame-flicker {
+  0%   { text-shadow: 0 0 10px rgba(255, 140, 0, 0.6), 0 0 30px rgba(255, 60, 0, 0.3); transform: rotate(-2deg); }
+  100% { text-shadow: 0 0 20px rgba(255, 184, 0, 0.8), 0 0 50px rgba(255, 100, 0, 0.5); transform: rotate(2deg) scale(1.05); }
+}
+
+/* ── Pulse Listening ── */
+@keyframes pulse-listening {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 51, 102, 0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(255, 51, 102, 0); }
+}
+
+/* ── Neural Pulse ── */
+@keyframes neural-pulse {
+  0%, 100% { opacity: 0.3; r: 3; }
+  50%       { opacity: 1;   r: 5; }
+}
+
+/* ── Score Ring ── */
+@keyframes ring-fill {
+  from { stroke-dashoffset: 251; }
+}
+
+/* ── Task Complete ── */
+@keyframes task-complete {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.08); }
+  70%  { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 0.5; filter: grayscale(0.5); }
+}
+
+/* ── Glow Pulse Border ── */
+@keyframes glow-border {
+  0%, 100% { border-color: rgba(0, 212, 255, 0.15); }
+  50%       { border-color: rgba(0, 212, 255, 0.4); box-shadow: 0 0 25px rgba(0, 212, 255, 0.15); }
+}
+
+/* ── Neon Flicker ── */
+@keyframes neon-flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96%           { opacity: 0.7; }
+  97%           { opacity: 1; }
+  98%           { opacity: 0.8; }
+}
+
+/* ── Particle Float ── */
+@keyframes float-particle {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 0.6; }
+  50%  { transform: translateY(-20px) rotate(180deg); opacity: 1; }
+  100% { transform: translateY(0) rotate(360deg); opacity: 0.6; }
+}
+
+/* ── Scan Line ── */
+@keyframes scan-line {
+  0%   { top: 0%; opacity: 0.4; }
+  50%  { opacity: 0.1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* ── Applied Classes ── */
+.anim-fade-in    { animation: fadeIn    0.4s ease forwards; }
+.anim-slide-up   { animation: slideUp   0.4s ease forwards; }
+.anim-scale-in   { animation: scaleIn   0.3s var(--transition-spring) forwards; }
+.anim-glow-border { animation: glow-border 3s ease-in-out infinite; }
+
+/* Stagger children */
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 420ms; }
+
+/* ── Hover Lift ── */
+.hover-lift { transition: transform var(--transition-normal), box-shadow var(--transition-normal); }
+.hover-lift:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
+
+/* ── Hover Glow ── */
+.hover-glow-cyan:hover   { box-shadow: var(--glow-cyan); }
+.hover-glow-purple:hover { box-shadow: var(--glow-purple); }
+.hover-glow-green:hover  { box-shadow: var(--glow-green); }
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
