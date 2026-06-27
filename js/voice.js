@@ -8,6 +8,7 @@ const Voice = (() => {
   let synth = window.speechSynthesis;
   let isListening = false;
   let onResultCb = null;
+  let cumulativeTranscript = '';
 
   function init(onResult) {
     onResultCb = onResult;
@@ -18,19 +19,25 @@ const Voice = (() => {
     }
     recognition = new SpeechRecognition();
     recognition.continuous    = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang          = 'en-US';
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (e) => {
-      let finalTranscript = '';
+      let interimTranscript = '';
       for (let i = e.resultIndex; i < e.results.length; ++i) {
         if (e.results[i].isFinal) {
-          finalTranscript += e.results[i][0].transcript;
+          cumulativeTranscript += e.results[i][0].transcript;
+        } else {
+          interimTranscript += e.results[i][0].transcript;
         }
       }
-      if (finalTranscript && onResultCb) {
-        onResultCb(finalTranscript);
+      
+      const input = document.getElementById('ai-chat-input');
+      if (input) {
+        input.value = cumulativeTranscript + interimTranscript;
+        // Trigger input event to hide quick actions dynamically
+        input.dispatchEvent(new Event('input'));
       }
     };
 
@@ -51,21 +58,25 @@ const Voice = (() => {
   function startListening() {
     if (!recognition) { showToast('Voice not supported in this browser', 'warning'); return; }
     if (isListening) { recognition.stop(); return; }
+    const input = document.getElementById('ai-chat-input');
+    cumulativeTranscript = input ? input.value : '';
     recognition.start();
     isListening = true;
     updateVoiceBtn(true);
-    showToast('Listening… speak now 🎙️', 'info');
   }
 
   function updateVoiceBtn(active) {
     const btn = document.getElementById('voice-btn');
+    const indicator = document.getElementById('ai-listening-indicator');
     if (!btn) return;
     if (active) {
       btn.style.color = '#ff3366';
       btn.style.textShadow = '0 0 10px rgba(255,51,102,0.8)';
+      if (indicator) indicator.style.display = 'block';
     } else {
       btn.style.color = '';
       btn.style.textShadow = '';
+      if (indicator) indicator.style.display = 'none';
     }
   }
 

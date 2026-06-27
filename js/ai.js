@@ -11,42 +11,42 @@ const AI = (() => {
     const now = new Date();
     const due = task.dueDate ? new Date(task.dueDate) : null;
 
-    // Deadline urgency (40%)
+    // Deadline urgency (40 points)
     if (due) {
       const hoursLeft = (due - now) / 36e5;
-      if (hoursLeft < 0)      score += 10;
-      else if (hoursLeft < 2) score += 9;
-      else if (hoursLeft < 8) score += 7;
-      else if (hoursLeft < 24) score += 5;
-      else if (hoursLeft < 72) score += 3;
-      else                     score += 1;
+      if (hoursLeft < 0)      score += 45;
+      else if (hoursLeft < 2) score += 40;
+      else if (hoursLeft < 8) score += 30;
+      else if (hoursLeft < 24) score += 20;
+      else if (hoursLeft < 72) score += 10;
+      else                     score += 5;
     }
 
-    // Keyword importance (30%)
+    // Keyword importance (30 points)
     const text = (task.title + ' ' + task.desc).toLowerCase();
     const critical = ['urgent', 'asap', 'critical', 'emergency', 'deadline', 'important'];
     const high     = ['meeting', 'submit', 'review', 'present', 'deliver', 'report'];
     const medium   = ['call', 'email', 'update', 'check', 'prepare'];
-    if (critical.some(k => text.includes(k))) score += 3;
-    else if (high.some(k => text.includes(k))) score += 2;
-    else if (medium.some(k => text.includes(k))) score += 1;
+    if (critical.some(k => text.includes(k))) score += 25;
+    else if (high.some(k => text.includes(k))) score += 15;
+    else if (medium.some(k => text.includes(k))) score += 5;
 
-    // Manual priority override (20%)
-    const priorityBonus = { critical: 4, high: 3, medium: 2, low: 1 };
-    score += priorityBonus[task.priority] || 2;
+    // Manual priority override (20 points)
+    const priorityBonus = { critical: 20, high: 15, medium: 10, low: 5 };
+    score += priorityBonus[task.priority] || 10;
 
-    // Category weight (10%)
-    const catWeight = { work: 2, health: 1.5, personal: 1, shopping: 0.5 };
-    score += catWeight[task.category] || 1;
+    // Category weight (10 points)
+    const catWeight = { work: 10, health: 8, personal: 5, shopping: 2 };
+    score += catWeight[task.category] || 5;
 
-    return Math.min(Math.round(score), 20);
+    return Math.min(Math.round(score), 100);
   }
 
   function autoAssignPriority(task) {
     const score = scorePriority(task);
-    if (score >= 15) return 'critical';
-    if (score >= 10) return 'high';
-    if (score >= 6)  return 'medium';
+    if (score >= 75) return 'critical';
+    if (score >= 50) return 'high';
+    if (score >= 25)  return 'medium';
     return 'low';
   }
 
@@ -84,12 +84,12 @@ const AI = (() => {
 
     parseTime(text) {
       const t = text.toLowerCase();
-      // "at 3pm", "at 14:30"
-      const at12 = t.match(/at (\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
-      if (at12) {
-        let h = parseInt(at12[1]);
-        const m = parseInt(at12[2] || '0');
-        const mer = at12[3];
+      // Match "at 3pm", "by 5pm", "before 14:30", or just "5pm"
+      const timeMatch = t.match(/(?:at|by|before)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+      if (timeMatch) {
+        let h = parseInt(timeMatch[1]);
+        const m = parseInt(timeMatch[2] || '0');
+        const mer = timeMatch[3];
         if (mer === 'pm' && h < 12) h += 12;
         if (mer === 'am' && h === 12) h = 0;
         return { h, m };
@@ -123,7 +123,9 @@ const AI = (() => {
       // Remove command words and time/date expressions
       return text
         .replace(/^(add|create|remind me to|schedule|set|new task|i need to)\s*/i, '')
-        .replace(/(today|tomorrow|next week|in \d+ days?|at \d+(:\d+)?\s*(am|pm)?|on (monday|tuesday|wednesday|thursday|friday|saturday|sunday))/gi, '')
+        .replace(/(today|tomorrow|next week|in \d+ days?|on (monday|tuesday|wednesday|thursday|friday|saturday|sunday))/gi, '')
+        .replace(/(?:at|by|before)?\s*\d{1,2}(?::\d{2})?\s*(am|pm)\b/gi, '')
+        .replace(/\b(noon|midnight|morning|evening|night)\b/gi, '')
         .replace(/(urgent|asap|critical|high priority|low priority)/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
@@ -132,7 +134,7 @@ const AI = (() => {
 
   function parseCommand(input) {
     const text = input.trim();
-    const date = NLP.parseDate(text);
+    let date = NLP.parseDate(text);
     const time = NLP.parseTime(text);
     const category = NLP.parseCategory(text);
     const priority  = NLP.parsePriority(text) || 'medium';
@@ -141,6 +143,14 @@ const AI = (() => {
 
     // Merge date + time
     let dueDate = null;
+    if (time && !date) {
+      date = new Date();
+      date.setHours(time.h, time.m, 0, 0);
+      if (date < new Date()) {
+        date.setDate(date.getDate() + 1); // If time passed today, assume tomorrow
+      }
+    }
+    
     if (date) {
       if (time) { date.setHours(time.h, time.m, 0, 0); }
       dueDate = date.toISOString();
@@ -278,11 +288,18 @@ The user is asking you a question or making a statement. Reply concisely, conver
 
 User says: "${prompt}"`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${window.ENV.GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${window.ENV.GEMINI_API_KEY}`;
     const payload = { contents: [{ parts: [{ text: systemPrompt }] }] };
 
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error('API Error');
+    if (!res.ok) {
+      let errMsg = 'API Error';
+      try { 
+        const errorData = await res.json();
+        errMsg = errorData?.error?.message || `HTTP Error ${res.status}`;
+      } catch (e) {}
+      throw new Error(errMsg);
+    }
     const data = await res.json();
     return data.candidates[0].content.parts[0].text;
   }
@@ -308,6 +325,14 @@ User says: "${prompt}"`;
       return { type: 'text', text: responses.prioritize(sorted) };
     }
 
+    // Add task (Prioritize this over general keyword queries like 'today')
+    if (/^(add|create|remind|schedule|set|new task|i need to|remind me to)\b/.test(t)) {
+      const parsed = parseCommand(input);
+      if (parsed.title && parsed.title.length > 2) {
+        return { type: 'add_task', data: parsed, text: responses.addTask(parsed.title) };
+      }
+    }
+
     // What's due today
     if (/\b(today|due today|today'?s tasks?)\b/.test(t)) {
       const today = Tasks.getByFilter('today');
@@ -331,16 +356,9 @@ User says: "${prompt}"`;
       return { type: 'text', text: `For "${top.title}":\n${responses.schedule(slots)}` };
     }
 
-    // Add task
-    if (/^(add|create|remind|schedule|set|new task|i need to|remind me to)\b/.test(t)) {
-      const parsed = parseCommand(input);
-      if (parsed.title && parsed.title.length > 2) {
-        return { type: 'add_task', data: parsed, text: responses.addTask(parsed.title) };
-      }
-    }
 
     // Motivational
-    if (/\b(motivat|inspire|quote|boost|energy)\b/.test(t)) {
+    if (/\b(motivate?|inspire|quote|boost|energy)\b/.test(t)) {
       const quotes = [
         '"The secret of getting ahead is getting started." — Mark Twain',
         '"Action is the foundational key to all success." — Pablo Picasso',
@@ -356,7 +374,10 @@ User says: "${prompt}"`;
       return { type: 'text', text: geminiResponse };
     } catch (e) {
       console.error('Gemini API Error:', e);
-      return { type: 'text', text: rand(responses.unknown) };
+      if (e.message === 'No API Key') {
+         return { type: 'text', text: "⚠️ **Missing Key!** Please add your Gemini API Key to `env.js`." };
+      }
+      return { type: 'text', text: `⚠️ **Gemini API Error:** ${e.message}` };
     }
   }
 

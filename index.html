@@ -8,7 +8,7 @@
   <title>NEXUS AI — Intelligent Productivity Companion</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/animations.css">
@@ -23,14 +23,14 @@
   <!-- ══════════ SPLASH / LOGIN SCREEN ══════════ -->
   <div class="modal-overlay open" id="splash-screen" style="z-index: 99999; backdrop-filter: blur(25px); background: rgba(3,3,10,0.85); display: flex;">
     <div class="modal" style="max-width: 450px; text-align: center; padding: 40px 30px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 0 40px rgba(168,85,247,0.15);">
-      <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--neon-purple), var(--neon-cyan)); margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; box-shadow: 0 0 30px rgba(168,85,247,0.4);">
+      <div style="width: 80px; height: 80px; border-radius: 4px; background: var(--bg-surface); border: 2px solid var(--neon-green); margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; box-shadow: 0 0 30px rgba(0,255,0,0.4); color: var(--neon-green);">
         ✦
       </div>
-      <h2 style="font-size: 1.8rem; margin-bottom: 10px; font-weight: 800; background: linear-gradient(to right, #fff, var(--neon-cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Welcome to NEXUS AI</h2>
+      <h2 style="font-size: 1.8rem; margin-bottom: 10px; font-weight: 800; color: var(--neon-green); font-family: 'Orbitron', sans-serif; font-style: italic; text-transform: uppercase;">Welcome to NEXUS AI</h2>
       <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 30px; line-height: 1.5;">Your intelligent productivity companion. Plan, prioritize, and crush every deadline with AI.</p>
       
       <div style="display: flex; flex-direction: column; gap: 15px;">
-        <button class="btn btn-primary" onclick="Auth.splashSignInWithGoogle()" style="padding: 14px; font-size: 1rem; font-weight: 600; box-shadow: 0 0 20px rgba(168,85,247,0.3);">
+        <button class="btn btn-primary" onclick="Auth.splashSignInWithGoogle()" style="padding: 14px; font-size: 1rem; font-weight: 600; box-shadow: 0 0 20px rgba(0,255,0,0.3); background: var(--neon-green); color: #000; border-radius: 4px; border: none; font-family: 'Orbitron', sans-serif; text-transform: uppercase;">
           ☁️ Sign in with Google
         </button>
         <button class="btn btn-ghost" onclick="Auth.continueAsGuest()" style="padding: 14px; font-size: 1rem; color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1);">
@@ -66,7 +66,7 @@
           <h3>NEXUS AI</h3>
           <small>Productivity OS</small>
         </div>
-        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" data-tooltip="Collapse Sidebar">‹</button>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" data-tooltip="Collapse Sidebar"><span class="toggle-icon">‹</span></button>
       </div>
 
       <!-- Nav Links -->
@@ -190,23 +190,23 @@
 
           <!-- Stats Grid -->
           <div class="stats-grid stagger-children">
-            <div class="stat-card cyan hover-lift anim-slide-up">
+            <div class="stat-card cyan hover-lift anim-slide-up" style="cursor: pointer;" onclick="App.showView('tasks'); TasksView.setFilter('all')">
               <div class="stat-icon">📋</div>
               <div class="stat-value" id="dash-total">—</div>
               <div class="stat-label">Total Tasks</div>
             </div>
-            <div class="stat-card green hover-lift anim-slide-up">
+            <div class="stat-card green hover-lift anim-slide-up" style="cursor: pointer;" onclick="App.showView('tasks'); TasksView.setFilter('completed')">
               <div class="stat-icon">✅</div>
               <div class="stat-value" id="dash-completed">—</div>
               <div class="stat-label">Completed</div>
-              <div class="stat-trend up">↑ great progress</div>
+              <div class="stat-trend up" id="dash-completed-trend"></div>
             </div>
-            <div class="stat-card amber hover-lift anim-slide-up">
+            <div class="stat-card amber hover-lift anim-slide-up" style="cursor: pointer;" onclick="App.showView('tasks'); TasksView.setFilter('today')">
               <div class="stat-icon">📅</div>
               <div class="stat-value" id="dash-today">—</div>
               <div class="stat-label">Due Today</div>
             </div>
-            <div class="stat-card purple hover-lift anim-slide-up">
+            <div class="stat-card purple hover-lift anim-slide-up" style="cursor: pointer;" onclick="App.showView('tasks'); TasksView.setFilter('overdue')">
               <div class="stat-icon">🚨</div>
               <div class="stat-value" id="dash-overdue">—</div>
               <div class="stat-label">Overdue</div>
@@ -308,7 +308,18 @@
               <button class="btn btn-ghost" id="cal-next" aria-label="Next month" data-tooltip="Next Month">Next ›</button>
             </div>
           </div>
-          <div id="calendar-grid-container"></div>
+          <div style="display:grid; grid-template-columns:1fr 280px; gap:24px; align-items:start;">
+            <div id="calendar-grid-container"></div>
+            
+            <!-- Upcoming Ops Sidebar -->
+            <div class="calendar-sidebar" style="border-left: 2px solid var(--neon-green); padding-left: 16px; margin-top: 40px;">
+              <div class="section-title" style="margin-bottom: 24px; color: var(--neon-green); font-family: 'Orbitron', sans-serif; letter-spacing: 0.1em; font-size: 0.9rem;">UPCOMING_OPS</div>
+              <div id="calendar-upcoming-ops" style="display: flex; flex-direction: column; gap: 16px;">
+                <!-- Tasks will be injected here -->
+              </div>
+              <button class="btn btn-ghost w-full" style="margin-top: 24px; font-size: 0.65rem; letter-spacing: 0.05em; border: 1px solid rgba(255,255,255,0.1);" onclick="App.showView('tasks'); TasksView.setFilter('all')">VIEW ALL OPERATIONS</button>
+            </div>
+          </div>
         </section>
 
         <!-- ════════ HABITS & GOALS VIEW ════════ -->
@@ -455,7 +466,7 @@
             <div class="glass-card" style="padding:24px">
               <h3 style="margin-bottom:16px;font-size:0.95rem;color:var(--neon-green)">⌨️ Keyboard Shortcuts</h3>
               <div style="display:flex;flex-direction:column;gap:10px;font-size:0.82rem">
-                <div style="display:flex;justify-content:space-between"><span>New Task</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Ctrl+N</kbd></div>
+                <div style="display:flex;justify-content:space-between"><span>New Task</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Alt+N</kbd></div>
                 <div style="display:flex;justify-content:space-between"><span>Search</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Ctrl+K</kbd></div>
                 <div style="display:flex;justify-content:space-between"><span>Toggle AI</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Ctrl+/</kbd></div>
                 <div style="display:flex;justify-content:space-between"><span>Close Modal</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Esc</kbd></div>
@@ -528,7 +539,8 @@
       </div>
 
       <!-- Input -->
-      <div class="ai-input-area">
+      <div class="ai-input-area" style="position:relative;">
+        <div id="ai-listening-indicator" style="display:none; text-align:center; color: #ff3366; font-size: 0.75rem; font-weight: bold; position: absolute; top: -20px; left: 0; width: 100%; text-shadow: 0 0 5px rgba(255,51,102,0.5); animation: pulse 1s infinite;">🎙️ Listening...</div>
         <div class="ai-input-row">
           <textarea id="ai-chat-input" placeholder="Ask NEXUS anything… or say 'add task'" rows="1" aria-label="AI chat input"></textarea>
           <button class="ai-voice-btn" id="voice-btn" aria-label="Voice input" data-tooltip="Voice Input">🎙</button>
@@ -651,19 +663,19 @@
 
   <!-- ══════════ SCRIPTS ══════════ -->
   <!-- Config & new modules (load before app.js) -->
-  <script src="env.js"></script>
+  <script src="env.js?v=2"></script>
   <script src="js/firebase-config.js"></script>
-  <script src="js/parser.js"></script>
-  <script src="js/tasks.js"></script>
-  <script src="js/ai.js"></script>
-  <script src="js/habits.js"></script>
-  <script src="js/analytics.js"></script>
-  <script src="js/voice.js"></script>
-  <script src="js/notifications.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/db.js"></script>
-  <script src="js/gcal.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/parser.js?v=2"></script>
+  <script src="js/tasks.js?v=2"></script>
+  <script src="js/ai.js?v=2"></script>
+  <script src="js/habits.js?v=2"></script>
+  <script src="js/analytics.js?v=2"></script>
+  <script src="js/voice.js?v=2"></script>
+  <script src="js/notifications.js?v=2"></script>
+  <script src="js/auth.js?v=2"></script>
+  <script src="js/db.js?v=2"></script>
+  <script src="js/gcal.js?v=2"></script>
+  <script src="js/app.js?v=2"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="GCal.init()"></script>
 
   <!-- Responsive sidebar fix -->

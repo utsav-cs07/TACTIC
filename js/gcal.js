@@ -34,15 +34,13 @@ const GCal = (() => {
       return;
     }
 
-    gapi.load('client:auth2', () => {
+    gapi.load('client', () => {
       gapi.client.init({
         apiKey:        GOOGLE_API_KEY,
-        clientId:      GOOGLE_CLIENT_ID,
         discoveryDocs: [GCAL_DISCOVERY],
-        scope:         GCAL_SCOPES,
       }).then(() => {
         gapiReady = true;
-        // If already signed in via Firebase Auth, use their token
+        // If already signed in via Firebase Auth and we have a token, set it
         const token = Auth.getAccessToken();
         if (token) {
           gapi.client.setToken({ access_token: token });
@@ -56,12 +54,12 @@ const GCal = (() => {
         let msg = typeof err === 'object' ? JSON.stringify(err) : err;
         if (err && err.details) msg = err.details;
         else if (err && err.error && err.error.message) msg = err.error.message;
-        initError = msg; // Store the error instead of spamming the user on every page load
+        initError = msg; 
       });
     });
   }
 
-  /* ── Sign in specifically for calendar (if not already via Firebase) ── */
+  /* ── Sign in specifically for calendar (delegated to Firebase) ── */
   async function signIn() {
     if (!gapiReady) { 
       if (initError) showToast('GCal Error: ' + initError, 'error', 10000);
@@ -69,19 +67,24 @@ const GCal = (() => {
       return; 
     }
     try {
-      await gapi.auth2.getAuthInstance().signIn({ scope: GCAL_SCOPES });
+      const token = await Auth.signInForCalendar();
+      if (!token) return; // User closed popup or failed
+
+      gapi.client.setToken({ access_token: token });
       isEnabled = true;
       await ensureNexusCalendar();
       updateCalSyncUI(true);
       showToast('Google Calendar connected! ✅', 'success');
     } catch (err) {
       console.error('[GCal] Sign in error:', err);
-      showToast('Calendar sign-in failed. Check browser pop-up blocker.', 'error');
+      showToast('Calendar sign-in failed.', 'error');
     }
   }
 
   async function signOut() {
-    if (gapiReady) await gapi.auth2.getAuthInstance().signOut();
+    if (gapiReady) {
+      gapi.client.setToken(null);
+    }
     isEnabled = false;
     calendarId = null;
     updateCalSyncUI(false);
@@ -195,6 +198,68 @@ const GCal = (() => {
     }
   }
 
+  let cachedCalsToFetch = null;
+  const eventsCache = {};
+
+  /* ── Fetch events from ALL relevant Google Calendars (Two-Way Sync) ── */
+  async function getExternalEvents(startDate, endDate) {
+    if (!isEnabled) return [];
+    
+    // Check cache for instant load
+    const monthKey = startDate.toISOString().slice(0, 7); // e.g. "2026-06"
+    if (eventsCache[monthKey]) return eventsCache[monthKey];
+
+    try {
+      // 1. Get list of calendars (Primary + Holidays) (Cached)
+      if (!cachedCalsToFetch) {
+        const calListRes = await gapi.client.calendar.calendarList.list();
+        cachedCalsToFetch = calListRes.result.items.filter(c => 
+          c.primary || (c.id && c.id.includes('holiday'))
+        );
+      }
+
+      let allEvents = [];
+
+      // 2. Fetch events for each calendar
+      await Promise.all(cachedCalsToFetch.map(async (cal) => {
+        try {
+          const res = await gapi.client.calendar.events.list({
+            calendarId:   cal.id,
+            timeMin:      startDate.toISOString(),
+            timeMax:      endDate.toISOString(),
+            singleEvents: true,
+            orderBy:      'startTime',
+            maxResults:   50,
+          });
+          const items = res.result.items || [];
+          const mapped = items.map(e => ({
+            id: e.id,
+            title: e.summary,
+            start: e.start.dateTime || e.start.date, // date is for all-day events like holidays
+            isExternal: true,
+            isHoliday: cal.id.includes('holiday')
+          }));
+          allEvents = allEvents.concat(mapped);
+        } catch(e) { console.warn('Failed to fetch cal:', cal.id); }
+      }));
+
+      // Deduplicate by title and start date (Google sometimes returns duplicates from different calendars)
+      const seen = new Set();
+      allEvents = allEvents.filter(e => {
+        const key = e.title + e.start;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      eventsCache[monthKey] = allEvents; // Save to cache
+      return allEvents;
+    } catch (err) {
+      console.warn('[GCal] getExternalEvents error:', err);
+      return [];
+    }
+  }
+
   /* ── Sync all pending tasks to Google Calendar ── */
   async function syncAllTasks(tasks) {
     if (!isEnabled) return;
@@ -234,5 +299,5 @@ const GCal = (() => {
 
   function isConnected() { return isEnabled; }
 
-  return { init, signIn, signOut, addEvent, updateEvent, deleteEvent, getEvents, syncAllTasks, isConnected };
+  return { init, signIn, signOut, addEvent, updateEvent, deleteEvent, getEvents, getExternalEvents, syncAllTasks, isConnected };
 })();

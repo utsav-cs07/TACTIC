@@ -122,6 +122,19 @@ const Habits = (() => {
     return g;
   }
 
+  function addMilestone(goalId, title) {
+    const g = goals.find(x => x.id === goalId);
+    if (!g) return;
+    g.milestones.push({ t: title, done: false });
+    save();
+    return g;
+  }
+
+  function deleteGoal(id) {
+    goals = goals.filter(g => g.id !== id);
+    save();
+  }
+
   function getGoalProgress(goal) {
     if (!goal.milestones.length) return 0;
     return Math.round((goal.milestones.filter(m => m.done).length / goal.milestones.length) * 100);
@@ -138,5 +151,5 @@ const Habits = (() => {
     return cells;
   }
 
-  return { load, save, getHabits, getGoals, createHabit, toggleHabitToday, isDoneToday, calcStreak, deleteHabit, createGoal, toggleMilestone, getGoalProgress, getHeatmapData };
+  return { load, save, getHabits, getGoals, createHabit, toggleHabitToday, isDoneToday, calcStreak, deleteHabit, createGoal, toggleMilestone, addMilestone, deleteGoal, getGoalProgress, getHeatmapData };
 })();

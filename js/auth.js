@@ -42,22 +42,56 @@ const Auth = (() => {
     }
     try {
       const provider = new firebase.auth.GoogleAuthProvider();
-      // Removed Calendar scopes from initial login to bypass Google's "Unverified App" warning
+      provider.addScope('https://www.googleapis.com/auth/calendar.events');
+      provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+      
       const result = await firebase.auth().signInWithPopup(provider);
-
-      // Store the OAuth access token for Google Calendar API calls (if available)
+      
+      // Save OAuth token for GCal Sync
       const credential = result.credential;
       if (credential && credential.accessToken) {
         sessionStorage.setItem('nexus_goog_token', credential.accessToken);
+        // Trigger GCal init if loaded
+        if (typeof GCal !== 'undefined') {
+          setTimeout(() => {
+            GCal.init();
+            // Automatically sync all pending tasks to calendar after init
+            setTimeout(() => {
+              if (GCal.isConnected() && window.Tasks) GCal.syncAllTasks(Tasks.getAll());
+            }, 2000);
+          }, 500);
+        }
       }
 
-      showToast(`Welcome, ${result.user.displayName}! 🎉`, 'success');
+      showToast(`Welcome, ${result.user.displayName}! 🎉 Calendar Connected.`, 'success');
     } catch (err) {
-
       console.error('Sign-in error:', err);
       if (err.code !== 'auth/popup-closed-by-user') {
         showToast('Sign-in failed: ' + err.message, 'error');
       }
+    }
+  }
+
+  async function signInForCalendar() {
+    if (!FIREBASE_ENABLED) return null;
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/calendar.events');
+      provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+      
+      const result = await firebase.auth().signInWithPopup(provider);
+      const credential = result.credential;
+      if (credential && credential.accessToken) {
+        sessionStorage.setItem('nexus_goog_token', credential.accessToken);
+        return credential.accessToken;
+      }
+      return null;
+    } catch (err) {
+      console.error('Calendar sign-in error:', err);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        showToast('Calendar sign-in failed: ' + err.message, 'error');
+      }
+      return null;
     }
   }
 
@@ -66,7 +100,8 @@ const Auth = (() => {
     try {
       await firebase.auth().signOut();
       sessionStorage.removeItem('nexus_goog_token');
-      showToast('Signed out. Data saved locally.', 'info');
+      localStorage.clear(); // Wipe sensitive data from screen
+      location.reload();    // Hard reset UI
     } catch (err) {
       console.error('Sign-out error:', err);
     }
@@ -123,8 +158,13 @@ const Auth = (() => {
   }
 
   function continueAsGuest() {
+    currentUser = { uid: 'local-guest', displayName: 'Guest User', email: '', photoURL: null, isGuest: true };
+    updateUI();
+    
     const splash = document.getElementById('splash-screen');
     if (splash) splash.style.display = 'none';
+    
+    showToast('Continuing as Guest. Data is saved locally but not synced to the cloud.', 'info', 6000);
     
     // Seed 2 default tasks if empty for Hackathon Judges
     setTimeout(() => {
@@ -156,5 +196,5 @@ const Auth = (() => {
     }, 500);
   }
 
-  return { init, signInWithGoogle, signOut, getUser, isLoggedIn, getAccessToken, updateUI, splashSignInWithGoogle, continueAsGuest };
+  return { init, signInWithGoogle, signInForCalendar, signOut, getUser, isLoggedIn, getAccessToken, updateUI, splashSignInWithGoogle, continueAsGuest };
 })();

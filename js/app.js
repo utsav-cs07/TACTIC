@@ -260,7 +260,8 @@ const AiChat = {
     this.addMessage('ai', result.text);
 
     if (result.type === 'add_task' && result.data) {
-      Tasks.create(result.data);
+      const createdTask = Tasks.create(result.data);
+      if (typeof DB !== 'undefined') DB.addTask(createdTask);
       App.renderCurrentView();
       App.updateBadges();
       showToast('Task created via AI! 🤖', 'success');
@@ -279,6 +280,11 @@ const AiChat = {
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
+    
+    // Un-hide quick actions when input is cleared
+    const quickActions = document.querySelector('.ai-quick-actions');
+    if (quickActions) quickActions.classList.remove('hidden');
+    
     this.respond(text);
   },
 
@@ -311,9 +317,9 @@ const CalendarView = {
     let html = `<div class="calendar-grid">`;
     ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => { html += `<div class="cal-day-header">${d}</div>`; });
 
-    // Empty slots before
+    // Empty slots before (padding from previous month)
     for (let i = 0; i < first; i++) {
-      const prevDay = new Date(year, month, 0 - (first - i - 2));
+      const prevDay = new Date(year, month, 0 - first + i + 1);
       html += `<div class="cal-day other-month"><div class="cal-day-num">${prevDay.getDate()}</div></div>`;
     }
 
@@ -330,12 +336,56 @@ const CalendarView = {
 
       if (dayTasks.length > 3) dots += `<div style="font-size:0.6rem;color:var(--text-muted);padding:1px 4px">+${dayTasks.length - 3} more</div>`;
 
+      // Safe local date string for ID mapping
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
       html += `<div class="cal-day${isToday ? ' today' : ''}" data-date="${date.toISOString()}">
-        <div class="cal-day-num">${d}</div>${dots}</div>`;
+        <div class="cal-day-num">${d}</div>
+        ${dots}
+        <div id="gcal-events-${dateStr}"></div>
+      </div>`;
     }
 
     html += '</div>';
     container.innerHTML = html;
+
+    // Render Upcoming Ops
+    const upcomingContainer = $('calendar-upcoming-ops');
+    if (upcomingContainer) {
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const upcomingTasks = tasks
+        .filter(t => t.dueDate && new Date(t.dueDate) >= todayStart)
+        .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+        .slice(0, 5); // Limit to 5
+      
+      if (upcomingTasks.length === 0) {
+        upcomingContainer.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); padding: 16px;">NO UPCOMING OPS. SYSTEM IDLE.</div>';
+      } else {
+        upcomingContainer.innerHTML = upcomingTasks.map(t => {
+          const tDate = new Date(t.dueDate);
+          const pColors = { critical: '#ff3366', high: '#ff8c00', medium: '#3b82f6', low: '#6b7280' };
+          const monthStr = tDate.toLocaleDateString('en-US', { month: 'short' });
+          const dayStr = String(tDate.getDate()).padStart(2, '0');
+          const timeStr = tDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          const isAllDay = (timeStr === '12:00 AM');
+          return `
+            <div class="upcoming-op-item" onclick="TaskModal.open(Tasks.getById('${t.id}'))">
+              <div class="upcoming-op-date">
+                <strong>${dayStr}</strong>
+                <span>${monthStr}</span>
+              </div>
+              <div class="upcoming-op-details">
+                <div class="upcoming-op-title" style="color: ${pColors[t.priority] || 'var(--neon-cyan)'}">${t.title}</div>
+                <div class="upcoming-op-time">
+                  ${t.category ? `<span style="border: 1px solid ${pColors[t.priority] || 'var(--neon-cyan)'}; padding: 1px 4px; border-radius: 2px; margin-right: 6px;">${t.category}</span>` : ''}
+                  ${isAllDay ? 'ALL DAY' : timeStr}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
 
     $qa('.cal-day:not(.other-month)').forEach(cell => {
       cell.addEventListener('click', () => {
@@ -346,6 +396,47 @@ const CalendarView = {
         }
       });
     });
+
+    // ── Asynchronous Google Calendar Two-Way Sync ──
+    if (typeof GCal !== 'undefined' && GCal.isConnected()) {
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 0);
+      GCal.getExternalEvents(start, end).then(events => {
+        
+        // Group events by date string
+        const eventsByDate = {};
+        events.forEach(e => {
+          if (!e.start) return;
+          const eDateStr = e.start.slice(0, 10);
+          if (!eventsByDate[eDateStr]) eventsByDate[eDateStr] = [];
+          eventsByDate[eDateStr].push(e);
+        });
+
+        // Render into containers safely
+        for (const [dateStr, dayEvents] of Object.entries(eventsByDate)) {
+          const c = document.getElementById(`gcal-events-${dateStr}`);
+          if (!c) continue;
+          
+          c.innerHTML = ''; // Clear to prevent double-renders if user clicked quickly
+          dayEvents.forEach(e => {
+            const div = document.createElement('div');
+            div.className = 'cal-task-dot';
+            div.title = e.title;
+            div.style.cssText = `background:rgba(66, 133, 244, 0.05);color:var(--text-secondary);border-left:2px solid ${e.isHoliday ? 'var(--neon-purple)' : '#4285f4'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;`;
+            div.innerHTML = `${e.isHoliday ? '🎉 ' : '📅 '}${e.title}`;
+            
+            // Prepopulate New Task with holiday name
+            div.onclick = (evt) => {
+              evt.stopPropagation();
+              if ($('task-title-input')) $('task-title-input').value = `Plan for ${e.title}`;
+              if ($('task-date-input')) $('task-date-input').value = `${dateStr}T09:00`;
+              TaskModal.open();
+            };
+            c.appendChild(div);
+          });
+        }
+      });
+    }
   },
 
   prev() { this.current.setMonth(this.current.getMonth() - 1); this.render(); },
@@ -383,6 +474,17 @@ const HabitsView = {
           <button class="btn-icon btn" onclick="HabitsView.deleteHabit('${h.id}')" style="color:var(--neon-red);flex-shrink:0">🗑</button>
         </div>`;
     }).join('');
+
+    const topStreakEl = $('top-streak');
+    const doneTodayEl = $('habits-done-today');
+    if (topStreakEl) {
+      const topStreak = habits.reduce((max, h) => Math.max(max, h.streak), 0);
+      topStreakEl.textContent = topStreak;
+    }
+    if (doneTodayEl) {
+      const doneToday = habits.filter(h => Habits.isDoneToday(h)).length;
+      doneTodayEl.textContent = `${doneToday} done`;
+    }
   },
 
   renderGoals() {
@@ -415,6 +517,11 @@ const HabitsView = {
                 </div>
                 <span style="font-size:0.83rem;${m.done ? 'text-decoration:line-through;color:var(--text-muted)' : ''}">${m.t}</span>
               </div>`).join('')}
+            
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+              <button class="btn btn-ghost btn-sm" onclick="HabitsView.addMilestone('${g.id}')">+ Add Milestone</button>
+              <button class="btn-icon btn" onclick="HabitsView.deleteGoal('${g.id}')" style="color:var(--neon-red);width:30px;height:30px;border:none" title="Delete Goal">🗑</button>
+            </div>
           </div>
         </div>`;
     }).join('');
@@ -422,11 +529,37 @@ const HabitsView = {
 
   toggleHabit(id) {
     Habits.toggleHabitToday(id);
+    DB.saveHabits(Habits.getHabits());
     this.renderHabits();
     showToast('Habit updated! 🔥', 'success');
   },
-  toggleMilestone(gid, idx) { Habits.toggleMilestone(gid, idx); this.renderGoals(); },
-  deleteHabit(id) { Habits.deleteHabit(id); this.renderHabits(); },
+  toggleMilestone(gid, idx) { 
+    Habits.toggleMilestone(gid, idx); 
+    DB.saveGoals(Habits.getGoals());
+    this.renderGoals(); 
+  },
+  addMilestone(gid) {
+    const title = prompt('Milestone name:');
+    if (title) {
+      Habits.addMilestone(gid, title);
+      DB.saveGoals(Habits.getGoals());
+      this.renderGoals();
+      showToast('Milestone added!', 'success');
+    }
+  },
+  deleteGoal(id) {
+    if (confirm('Delete this goal?')) {
+      Habits.deleteGoal(id);
+      DB.saveGoals(Habits.getGoals());
+      this.renderGoals();
+      showToast('Goal deleted', 'info');
+    }
+  },
+  deleteHabit(id) { 
+    Habits.deleteHabit(id); 
+    DB.saveHabits(Habits.getHabits());
+    this.renderHabits(); 
+  },
 };
 
 /* ── Analytics View ── */
@@ -566,7 +699,7 @@ const TasksView = {
               ${due ? `<span class="task-time${isOverdue ? ' overdue' : ''}">🕐 ${due}</span>` : ''}
               ${task.estimatedMins ? `<span class="task-time">⏱ ${task.estimatedMins}m</span>` : ''}
               ${task.repeat ? `<span class="task-time">🔁 ${task.repeat}</span>` : ''}
-              <span style="font-size:0.68rem;color:${pColors[task.priority]};margin-left:auto;font-weight:700">AI ${score}/20</span>
+              <span style="font-size:0.68rem;color:${pColors[task.priority]};margin-left:auto;font-weight:700">AI ${score}/100</span>
             </div>
             ${task.subtasks && task.subtasks.length ? `
               <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">
@@ -591,7 +724,13 @@ const TasksView = {
   toggleTask(e, id) {
     e.stopPropagation();
     const task = Tasks.toggle(id);
-    if (task?.completed) showToast('Task completed! 🎉', 'success');
+    if (task) {
+      // Sync to DB + Calendar
+      DB.updateTask(id, { completed: task.completed });
+      if (task.gcalEventId) GCal.updateEvent(task.gcalEventId, task);
+      
+      if (task.completed) showToast('Task completed! 🎉', 'success');
+    }
     this.render();
     App.renderDashboard();
     App.updateBadges();
@@ -627,6 +766,28 @@ const Dashboard = {
     el('dash-completed', stats.completed);
     el('dash-overdue',   stats.overdue);
     el('dash-today',     stats.today);
+
+    // Dynamic Progress Trend
+    const trendEl = $('dash-completed-trend');
+    if (trendEl) {
+      if (stats.completed === 0) {
+        trendEl.textContent = "— let's begin";
+        trendEl.className = 'stat-trend';
+        trendEl.style.color = 'var(--text-muted)';
+      } else if (stats.rate === 100) {
+        trendEl.textContent = '↑ perfect score! 🌟';
+        trendEl.className = 'stat-trend up';
+        trendEl.style.color = 'var(--neon-green)';
+      } else if (stats.rate >= 50) {
+        trendEl.textContent = '↑ great progress';
+        trendEl.className = 'stat-trend up';
+        trendEl.style.color = 'var(--neon-green)';
+      } else {
+        trendEl.textContent = '↑ gaining momentum';
+        trendEl.className = 'stat-trend up';
+        trendEl.style.color = 'var(--neon-green)';
+      }
+    }
 
     // AI Insight
     const insight = AI.getContextualSuggestion(Tasks.getAll());
@@ -793,6 +954,15 @@ const App = {
     $('ai-panel-close')?.addEventListener('click', () => AiChat.close());
     $('ai-send-btn')?.addEventListener('click', () => AiChat.sendMessage());
     $('ai-chat-input')?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); AiChat.sendMessage(); } });
+    
+    // Hide quick actions when typing
+    $('ai-chat-input')?.addEventListener('input', e => {
+      const quickActions = document.querySelector('.ai-quick-actions');
+      if (quickActions) {
+        if (e.target.value.trim().length > 0) quickActions.classList.add('hidden');
+        else quickActions.classList.remove('hidden');
+      }
+    });
 
     // Voice btn
     $('voice-btn')?.addEventListener('click', () => Voice.startListening());
@@ -834,6 +1004,7 @@ const App = {
       const name = prompt('Habit name:');
       if (name) {
         Habits.createHabit({ name, icon: '⭐', color: '#00d4ff', target: 'daily' });
+        DB.saveHabits(Habits.getHabits());
         HabitsView.render();
         showToast('Habit created!', 'success');
       }
@@ -843,6 +1014,7 @@ const App = {
       const title = prompt('Goal title:');
       if (title) {
         Habits.createGoal({ title, icon: '🎯', color: '#a855f7' });
+        DB.saveGoals(Habits.getGoals());
         HabitsView.render();
         showToast('Goal created!', 'success');
       }
@@ -855,7 +1027,7 @@ const App = {
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { TaskModal.close(); AiChat.close(); }
       if (e.ctrlKey && e.key === 'k') { e.preventDefault(); $('global-search')?.focus(); }
-      if (e.ctrlKey && e.key === 'n') { e.preventDefault(); TaskModal.open(); }
+      if (e.altKey && e.key === 'n') { e.preventDefault(); TaskModal.open(); }
       if (e.ctrlKey && e.key === '/') { e.preventDefault(); AiChat.toggle(); }
     });
 

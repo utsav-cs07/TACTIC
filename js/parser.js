@@ -96,16 +96,17 @@ const Parser = (() => {
       parts.unshift({
         text: `You are an AI task extractor. Today's date is ${new Date().toISOString()}.
 Look at the attached datesheet or text. Extract all exams, assignments, or important deadlines.${adviceText}
+CRITICAL TABLE HANDLING: If the document is a table with multiple columns (like a datesheet), and the user's special instructions specify a specific column or branch (e.g., "IT column", "CSE"), you MUST ONLY extract items from THAT exact column. Ignore ALL items in other columns, even if they look like exams! If the target column is full of stars or blanks for a specific date, skip that date entirely.
 Return ONLY a valid JSON array of objects. Do not include markdown formatting like \`\`\`json.
 Each object must have:
 - "title": string (e.g. "Mathematics Exam")
-- "dueDate": string (ISO 8601 format datetime). CRITICAL: If the dates in the document are from the past (e.g., 2-3 months old), shift the month/year forward so they are scheduled for upcoming dates starting from today! CRITICAL: If the exact time of the exam is not explicitly mentioned in the datesheet, YOU MUST set the time to 09:00:00. If no date is found, set it to tomorrow.
+- "dueDate": string (ISO 8601 format datetime). CRITICAL: If the dates in the document are from the past, shift the month/year forward so they are scheduled for upcoming dates! If exact time is missing, YOU MUST set it to 09:00:00.
 - "category": string (e.g. "work" or "personal" or "health")
-If no subjects/exams are found (or if they are completely filtered out by the user instructions), return an empty array [].`
+If no subjects/exams are found for the requested column, return an empty array [].`
       });
 
       // Call Gemini API
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${window.ENV.GEMINI_API_KEY}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${window.ENV.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

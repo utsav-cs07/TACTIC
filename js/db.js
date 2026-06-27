@@ -59,14 +59,16 @@ const DB = (() => {
 
   async function addTask(task) {
     if (isFirestore) {
-      const ref = getUserPath('tasks').doc(task.id);
-      const firestoreTask = {
-        ...task,
-        dueDate:   task.dueDate   ? firebase.firestore.Timestamp.fromDate(new Date(task.dueDate)) : null,
-        createdAt: task.createdAt ? firebase.firestore.Timestamp.fromDate(new Date(task.createdAt)) : firebase.firestore.FieldValue.serverTimestamp(),
-      };
-      await ref.set(firestoreTask);
-      console.log('[DB] Task saved to Firestore:', task.id);
+      try {
+        const ref = getUserPath('tasks').doc(task.id);
+        const firestoreTask = {
+          ...task,
+          dueDate:   task.dueDate   ? firebase.firestore.Timestamp.fromDate(new Date(task.dueDate)) : null,
+          createdAt: task.createdAt ? firebase.firestore.Timestamp.fromDate(new Date(task.createdAt)) : firebase.firestore.FieldValue.serverTimestamp(),
+        };
+        await ref.set(firestoreTask);
+        console.log('[DB] Task saved to Firestore:', task.id);
+      } catch (e) { console.warn('[DB] Failed to save to Firestore:', e); }
     }
     // Always save to localStorage too (offline resilience)
     Tasks.save();
@@ -74,16 +76,20 @@ const DB = (() => {
 
   async function updateTask(id, data) {
     if (isFirestore) {
-      const update = { ...data };
-      if (data.dueDate) update.dueDate = firebase.firestore.Timestamp.fromDate(new Date(data.dueDate));
-      await getUserPath('tasks').doc(id).update(update);
+      try {
+        const update = { ...data };
+        if (data.dueDate) update.dueDate = firebase.firestore.Timestamp.fromDate(new Date(data.dueDate));
+        await getUserPath('tasks').doc(id).update(update);
+      } catch (e) { console.warn('[DB] Failed to update Firestore:', e); }
     }
     Tasks.save();
   }
 
   async function deleteTask(id) {
     if (isFirestore) {
-      await getUserPath('tasks').doc(id).delete();
+      try {
+        await getUserPath('tasks').doc(id).delete();
+      } catch (e) { console.warn('[DB] Failed to delete from Firestore:', e); }
     }
     Tasks.save();
   }
@@ -92,25 +98,29 @@ const DB = (() => {
 
   async function saveHabits(habits) {
     if (isFirestore) {
-      const batch = db.batch();
-      habits.forEach(h => {
-        const ref = getUserPath('habits').doc(h.id);
-        batch.set(ref, h);
-      });
-      await batch.commit();
+      try {
+        const batch = db.batch();
+        habits.forEach(h => {
+          const ref = getUserPath('habits').doc(h.id);
+          batch.set(ref, h);
+        });
+        await batch.commit();
+      } catch (e) { console.warn('[DB] Failed to save habits to Firestore:', e); }
     }
     Habits.save();
   }
 
   async function saveGoals(goals) {
     if (isFirestore) {
-      const batch = db.batch();
-      goals.forEach(g => {
-        const ref = getUserPath('goals').doc(g.id);
-        const goal = { ...g, deadline: g.deadline ? firebase.firestore.Timestamp.fromDate(new Date(g.deadline)) : null };
-        batch.set(ref, goal);
-      });
-      await batch.commit();
+      try {
+        const batch = db.batch();
+        goals.forEach(g => {
+          const ref = getUserPath('goals').doc(g.id);
+          const goal = { ...g, deadline: g.deadline ? firebase.firestore.Timestamp.fromDate(new Date(g.deadline)) : null };
+          batch.set(ref, goal);
+        });
+        await batch.commit();
+      } catch (e) { console.warn('[DB] Failed to save goals to Firestore:', e); }
     }
     Habits.save();
   }
@@ -145,25 +155,45 @@ const DB = (() => {
     const localTasks = JSON.parse(localStorage.getItem('nexus_tasks') || '[]');
     if (!localTasks.length) return;
 
-    // Check if Firestore already has data
-    const snap = await getUserPath('tasks').limit(1).get();
-    if (!snap.empty) {
-      console.log('[DB] Firestore already has data — skipping migration');
-      return;
-    }
+    try {
+      // Check if Firestore already has data
+      const snap = await getUserPath('tasks').limit(1).get();
+      if (!snap.empty) {
+        console.log('[DB] Firestore already has data — skipping migration');
+        return;
+      }
 
-    console.log(`[DB] Migrating ${localTasks.length} local tasks to Firestore...`);
-    const batch = db.batch();
-    localTasks.forEach(task => {
-      const ref = getUserPath('tasks').doc(task.id);
-      batch.set(ref, {
-        ...task,
-        dueDate:   task.dueDate   ? firebase.firestore.Timestamp.fromDate(new Date(task.dueDate))   : null,
-        createdAt: task.createdAt ? firebase.firestore.Timestamp.fromDate(new Date(task.createdAt)) : firebase.firestore.FieldValue.serverTimestamp(),
+      console.log(`[DB] Migrating ${localTasks.length} local tasks to Firestore...`);
+      const batch = db.batch();
+      localTasks.forEach(task => {
+        const ref = getUserPath('tasks').doc(task.id);
+        batch.set(ref, {
+          ...task,
+          dueDate:   task.dueDate   ? firebase.firestore.Timestamp.fromDate(new Date(task.dueDate))   : null,
+          createdAt: task.createdAt ? firebase.firestore.Timestamp.fromDate(new Date(task.createdAt)) : firebase.firestore.FieldValue.serverTimestamp(),
+        });
       });
-    });
-    await batch.commit();
-    showToast(`✓ ${localTasks.length} tasks synced to cloud!`, 'success');
+
+      // Migrate Habits
+      const localHabits = JSON.parse(localStorage.getItem('nexus_habits') || '[]');
+      localHabits.forEach(h => {
+        batch.set(getUserPath('habits').doc(h.id), h);
+      });
+
+      // Migrate Goals
+      const localGoals = JSON.parse(localStorage.getItem('nexus_goals') || '[]');
+      localGoals.forEach(g => {
+        batch.set(getUserPath('goals').doc(g.id), {
+          ...g,
+          deadline: g.deadline ? firebase.firestore.Timestamp.fromDate(new Date(g.deadline)) : null
+        });
+      });
+
+      await batch.commit();
+      showToast(`✓ Synced ${localTasks.length} tasks & habits to cloud!`, 'success');
+    } catch (e) {
+      console.warn('[DB] Firestore migration failed (likely permission denied).', e);
+    }
   }
 
   /* ── Load all data from Firestore into local state ── */
