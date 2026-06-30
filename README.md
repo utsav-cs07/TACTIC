@@ -1,5 +1,9 @@
 # TACTIC AI — Intelligent Productivity Companion   tactic-ai.netlify.app
 
+### 🌐 Live Demo
+**Try the app here:** https://your-netlify-site.netlify.app
+
+
 > 🏆 Hackathon Project — AI-powered task scheduler with Google Calendar integration & Firebase cloud storage
 
 ![TACTIC AI](https://img.shields.io/badge/NEXUS-AI%20Powered-00d4ff?style=for-the-badge)
