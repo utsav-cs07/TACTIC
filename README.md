@@ -1,4 +1,4 @@
-# TACTIC AI — Intelligent Productivity Companion
+# TACTIC AI — Intelligent Productivity Companion   tactic-ai.netlify.app
 
 > 🏆 Hackathon Project — AI-powered task scheduler with Google Calendar integration & Firebase cloud storage
 
