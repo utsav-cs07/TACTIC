@@ -1,8 +1,8 @@
-# NEXUS AI — Intelligent Productivity Companion
+# TACTIC AI — Intelligent Productivity Companion
 
 > 🏆 Hackathon Project — AI-powered task scheduler with Google Calendar integration & Firebase cloud storage
 
-![NEXUS AI](https://img.shields.io/badge/NEXUS-AI%20Powered-00d4ff?style=for-the-badge)
+![TACTIC AI](https://img.shields.io/badge/NEXUS-AI%20Powered-00d4ff?style=for-the-badge)
 ![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange?style=for-the-badge&logo=firebase)
 ![Google Calendar](https://img.shields.io/badge/Google-Calendar%20API-4285F4?style=for-the-badge&logo=google-calendar)
 
@@ -13,7 +13,7 @@
 | Feature | Description |
 |---|---|
 | 🧠 **AI Task Engine** | Auto-prioritizes tasks using deadline urgency, keywords & category scoring |
-| 💬 **NEXUS AI Chat** | Natural language task creation — *"Add meeting tomorrow at 3pm"* |
+| 💬 **TACTIC AI Chat** | Natural language task creation — *"Add meeting tomorrow at 3pm"* |
 | ☁️ **Firebase Database** | Real-time cloud sync — data persists across all devices |
 | 📅 **Google Calendar Sync** | Two-way sync — tasks appear in your real Google Calendar |
 | 🎙️ **Voice Input** | Web Speech API — speak your tasks |
@@ -233,4 +233,4 @@ MIT License — Free to use, modify, and distribute.
 
 ---
 
-Made with ⚡ for hackathon by **NEXUS AI Team**
+Made with ⚡ for hackathon by **TACTIC AI Team**
