@@ -23,17 +23,30 @@ const Tasks = (() => {
     try {
       const t = localStorage.getItem(STORAGE_KEY);
       const l = localStorage.getItem(LIST_KEY);
-      tasks = t ? JSON.parse(t) : getSampleTasks();
+      const isAuth = typeof Auth !== 'undefined' && Auth.isLoggedIn();
+      
+      tasks = t ? JSON.parse(t) : (isAuth ? [] : getSampleTasks());
       lists = l ? JSON.parse(l) : [...defaultLists];
+      
+      // If auth'd, filter out any demo tasks that might have been saved locally
+      if (isAuth) {
+        tasks = tasks.filter(task => !task.isDemo);
+      }
     } catch {
-      tasks = getSampleTasks();
+      const isAuth = typeof Auth !== 'undefined' && Auth.isLoggedIn();
+      tasks = isAuth ? [] : getSampleTasks();
       lists = [...defaultLists];
     }
   }
 
   function save() {
+    if (window.isGuestMode) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
     localStorage.setItem(LIST_KEY, JSON.stringify(lists));
+  }
+
+  function setDemoData(demoTasks) {
+    tasks = demoTasks;
   }
 
   // ── Sample Data ──
@@ -47,16 +60,16 @@ const Tasks = (() => {
     };
 
     return [
-      { id: uid(), title: 'Finalize hackathon presentation deck', desc: 'Prepare slides covering problem statement, solution, demo, and impact', priority: 'critical', category: 'work',     dueDate: d(0, 17, 0),  completed: false, subtasks: [{ t: 'Problem slide', done: true }, { t: 'Demo screenshot', done: false }], tags: ['hackathon', 'urgent'], estimatedMins: 120, createdAt: d(-1), repeat: null },
-      { id: uid(), title: 'Code review for feature branch', desc: '',           priority: 'high',     category: 'work',     dueDate: d(0, 14, 0),  completed: false, subtasks: [], tags: ['code'],     estimatedMins: 45,  createdAt: d(-1), repeat: null },
-      { id: uid(), title: 'Team standup call', desc: 'Daily sync at noon',      priority: 'medium',   category: 'work',     dueDate: d(0, 12, 0),  completed: true,  subtasks: [], tags: ['meeting'],  estimatedMins: 30,  createdAt: d(-2), repeat: 'daily' },
-      { id: uid(), title: 'Gym session — leg day', desc: '',                    priority: 'medium',   category: 'health',   dueDate: d(0, 18, 30), completed: false, subtasks: [], tags: ['fitness'],  estimatedMins: 60,  createdAt: d(-1), repeat: null },
-      { id: uid(), title: 'Submit project report',  desc: 'Final report PDF',   priority: 'critical', category: 'work',     dueDate: d(1, 23, 59), completed: false, subtasks: [{ t: 'Write conclusion', done: false }, { t: 'Add references', done: false }], tags: ['deadline'], estimatedMins: 90, createdAt: d(-3), repeat: null },
-      { id: uid(), title: 'Buy groceries', desc: 'Milk, eggs, bread, fruits',   priority: 'low',      category: 'shopping', dueDate: d(1, 19, 0),  completed: false, subtasks: [], tags: [],           estimatedMins: 30,  createdAt: d(-1), repeat: null },
-      { id: uid(), title: 'Read design systems book', desc: '2 chapters',       priority: 'low',      category: 'personal', dueDate: d(3, 21, 0),  completed: false, subtasks: [], tags: ['learning'], estimatedMins: 50,  createdAt: d(-2), repeat: null },
-      { id: uid(), title: 'Doctor appointment', desc: 'Annual checkup',         priority: 'high',     category: 'health',   dueDate: d(2, 11, 0),  completed: false, subtasks: [], tags: ['health'],   estimatedMins: 60,  createdAt: d(-2), repeat: null },
-      { id: uid(), title: 'Pay monthly bills', desc: 'Electricity + internet',  priority: 'high',     category: 'personal', dueDate: d(2, 20, 0),  completed: false, subtasks: [], tags: ['finance'],  estimatedMins: 15,  createdAt: d(-1), repeat: 'monthly' },
-      { id: uid(), title: 'Meditation morning routine', desc: '15 mins',        priority: 'low',      category: 'health',   dueDate: d(0, 7, 0),   completed: true,  subtasks: [], tags: ['wellness'], estimatedMins: 15,  createdAt: d(-5), repeat: 'daily' },
+      { id: uid(), isDemo: true, title: 'Finalize hackathon presentation deck', desc: 'Prepare slides covering problem statement, solution, demo, and impact', priority: 'critical', category: 'work',     dueDate: d(0, 17, 0),  completed: false, subtasks: [{ t: 'Problem slide', done: true }, { t: 'Demo screenshot', done: false }], tags: ['hackathon', 'urgent'], estimatedMins: 120, createdAt: d(-1), repeat: null },
+      { id: uid(), isDemo: true, title: 'Code review for feature branch', desc: '',           priority: 'high',     category: 'work',     dueDate: d(0, 14, 0),  completed: false, subtasks: [], tags: ['code'],     estimatedMins: 45,  createdAt: d(-1), repeat: null },
+      { id: uid(), isDemo: true, title: 'Team standup call', desc: 'Daily sync at noon',      priority: 'medium',   category: 'work',     dueDate: d(0, 12, 0),  completed: true,  subtasks: [], tags: ['meeting'],  estimatedMins: 30,  createdAt: d(-2), repeat: 'daily' },
+      { id: uid(), isDemo: true, title: 'Gym session — leg day', desc: '',                    priority: 'medium',   category: 'health',   dueDate: d(0, 18, 30), completed: false, subtasks: [], tags: ['fitness'],  estimatedMins: 60,  createdAt: d(-1), repeat: null },
+      { id: uid(), isDemo: true, title: 'Submit project report',  desc: 'Final report PDF',   priority: 'critical', category: 'work',     dueDate: d(1, 23, 59), completed: false, subtasks: [{ t: 'Write conclusion', done: false }, { t: 'Add references', done: false }], tags: ['deadline'], estimatedMins: 90, createdAt: d(-3), repeat: null },
+      { id: uid(), isDemo: true, title: 'Buy groceries', desc: 'Milk, eggs, bread, fruits',   priority: 'low',      category: 'shopping', dueDate: d(1, 19, 0),  completed: false, subtasks: [], tags: [],           estimatedMins: 30,  createdAt: d(-1), repeat: null },
+      { id: uid(), isDemo: true, title: 'Read design systems book', desc: '2 chapters',       priority: 'low',      category: 'personal', dueDate: d(3, 21, 0),  completed: false, subtasks: [], tags: ['learning'], estimatedMins: 50,  createdAt: d(-2), repeat: null },
+      { id: uid(), isDemo: true, title: 'Doctor appointment', desc: 'Annual checkup',         priority: 'high',     category: 'health',   dueDate: d(2, 11, 0),  completed: false, subtasks: [], tags: ['health'],   estimatedMins: 60,  createdAt: d(-2), repeat: null },
+      { id: uid(), isDemo: true, title: 'Pay monthly bills', desc: 'Electricity + internet',  priority: 'high',     category: 'personal', dueDate: d(2, 20, 0),  completed: false, subtasks: [], tags: ['finance'],  estimatedMins: 15,  createdAt: d(-1), repeat: 'monthly' },
+      { id: uid(), isDemo: true, title: 'Meditation morning routine', desc: '15 mins',        priority: 'low',      category: 'health',   dueDate: d(0, 7, 0),   completed: true,  subtasks: [], tags: ['wellness'], estimatedMins: 15,  createdAt: d(-5), repeat: 'daily' },
     ];
   }
 
@@ -86,6 +99,7 @@ const Tasks = (() => {
       createdAt:    new Date().toISOString(),
     };
     tasks.unshift(task);
+    if (typeof ProductTour !== 'undefined') ProductTour.onTaskCreated();
     save();
     return task;
   }
@@ -101,6 +115,7 @@ const Tasks = (() => {
   function toggle(id) {
     const task = getById(id);
     if (!task) return null;
+    if (!task.completed && typeof ProductTour !== 'undefined') ProductTour.onTaskCompleted();
     return update(id, { completed: !task.completed });
   }
 
@@ -175,5 +190,5 @@ const Tasks = (() => {
     return data;
   }
 
-  return { load, save, getAll, getLists, getById, create, update, toggle, remove, createList, getByFilter, search, getStats, getWeeklyData, uid };
+  return { load, save, getAll, getLists, getById, create, update, toggle, remove, createList, getByFilter, search, getStats, getWeeklyData, uid, get tasks() { return tasks; }, set tasks(v) { tasks = v; } };
 })();

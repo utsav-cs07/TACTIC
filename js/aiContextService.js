@@ -41,15 +41,24 @@ const AIContextService = {
             d.setHours(h, m, 0, 0);
             return d;
         };
-        const workEnd = parseTime(routine.collegeEnd || routine.workEndTime || '17:00');
+        const workEnd = routine.collegeEnd || routine.workEndTime ? parseTime(routine.collegeEnd || routine.workEndTime) : null;
         const sleep = parseTime(routine.sleepTime || '23:00');
+        const wake = parseTime(routine.wakeUpTime || '07:00');
         
-        if (workEnd && sleep) {
-            if (now >= workEnd && now < sleep) {
-                remainingStudyTimeMins = Math.floor((sleep - now) / 60000);
-            } else if (now < workEnd) {
-                // If it's before work ends, remaining time is later tonight
-                remainingStudyTimeMins = Math.floor((sleep - workEnd) / 60000);
+        if (sleep) {
+            if (workEnd) {
+                // Normal College Day
+                if (now >= workEnd && now < sleep) {
+                    remainingStudyTimeMins = Math.floor((sleep - now) / 60000);
+                } else if (now < workEnd) {
+                    remainingStudyTimeMins = Math.floor((sleep - workEnd) / 60000);
+                }
+            } else {
+                // Holiday Mode (No College)
+                if (now < sleep) {
+                    const startCount = Math.max(now.getTime(), wake ? wake.getTime() : now.getTime());
+                    remainingStudyTimeMins = Math.floor((sleep.getTime() - startCount) / 60000);
+                }
             }
         }
     }

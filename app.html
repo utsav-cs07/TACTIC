@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/animations.css">
   <link rel="stylesheet" href="css/gantt.css">
+  <link rel="stylesheet" href="css/tour.css">
 
   <!-- Firebase SDK (v9 compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -122,11 +123,11 @@
                   <input type="time" class="form-input" id="ob-sleep" required value="23:00">
                 </div>
                 <div class="form-group">
-                  <label class="form-label">College / Work Start *</label>
+                  <label class="form-label">College / Work Start</label>
                   <input type="time" class="form-input" id="ob-workstart" required value="09:00">
                 </div>
                 <div class="form-group">
-                  <label class="form-label">College / Work End *</label>
+                  <label class="form-label">College / Work End</label>
                   <input type="time" class="form-input" id="ob-workend" required value="17:00">
                 </div>
                 <div class="form-group">
@@ -252,11 +253,6 @@
 
   <!-- App Shell -->
   <div id="app">
-    <!-- Demo Badge -->
-    <div id="demo-badge" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(255, 51, 102, 0.9); backdrop-filter:blur(10px); color:#fff; padding:8px 16px; border-radius:20px; font-size:0.8rem; font-weight:600; z-index:9999; box-shadow:0 0 20px rgba(255,51,102,0.4); border:1px solid rgba(255,255,255,0.2);">
-      Demo Mode – Changes are not saved.
-    </div>
-
     <!-- ══════════ SIDEBAR ══════════ -->
     <nav class="sidebar" id="sidebar">
       <!-- Logo -->
@@ -328,6 +324,9 @@
         <div class="topbar-left">
           <button class="topbar-btn" id="mobile-menu-btn" style="display:none" aria-label="Menu">☰</button>
           <div id="topbar-title" class="topbar-title">Dashboard</div>
+          <div id="demo-badge" class="badge badge-critical pointer" style="display:none; margin-left: var(--space-md); cursor: pointer;" onclick="Auth.splashSignInWithGoogle()" data-tooltip="You are exploring TACTIC using demo data. Sign in to save your own tasks, habits, goals, and AI progress." data-tooltip-pos="bottom">
+            🎮 Demo / Guest Mode (Sign In)
+          </div>
         </div>
 
         <div class="topbar-search">
@@ -350,7 +349,7 @@
           <span id="sync-badge" style="font-size:0.68rem;font-weight:700;padding:3px 8px;border-radius:var(--radius-full);background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);color:var(--neon-cyan);display:none">☁ Synced</span>
 
           <!-- AI Toggle -->
-          <button class="topbar-btn" id="ai-toggle-btn" data-tooltip="Open AI Assistant (Ctrl+/)" data-tooltip-pos="bottom" style="color:var(--neon-purple)" aria-label="Open AI Assistant">✦</button>
+          <button class="topbar-btn" id="ai-toggle-btn" data-tooltip="Tactic AI (Ctrl+/)" data-tooltip-pos="bottom" style="color:var(--neon-purple)" aria-label="Tactic AI">T</button>
 
           <!-- Sign In / Avatar -->
           <button id="auth-login-btn" class="btn btn-primary btn-sm" onclick="Auth.signInWithGoogle()" style="display:none" data-tooltip="Connect with your Google account" data-tooltip-pos="bottom">Sign in with Google</button>
@@ -432,10 +431,10 @@
           <div style="display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start" id="dash-grid">
 
             <!-- Today's Tasks -->
-            <div class="glass-card" style="padding:24px">
-              <div class="section-header" style="margin-bottom:20px">
+            <div class="glass-card" style="padding:var(--space-lg)">
+              <div class="section-header" style="margin-bottom:var(--space-md)">
                 <span class="section-title">Today's Priority Tasks</span>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap;">
                   <button class="btn btn-primary btn-sm" onclick="Dashboard.planDay()" data-tooltip="Generate schedule based on your routine">PLAN MY DAY 🧠</button>
                   <button class="btn btn-primary btn-sm" onclick="document.getElementById('datesheet-upload').click()" data-tooltip="Upload Image/Text/CSV">UPLOAD DATESHEET 📄</button>
                   <button class="btn btn-primary btn-sm" onclick="TaskModal.open()" id="add-task-btn-dash" data-tooltip="Create a new task">+ Add Task</button>
@@ -445,10 +444,10 @@
             </div>
 
             <!-- Right Column -->
-            <div style="display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;flex-direction:column;gap:var(--space-md)">
               <!-- Progress Ring -->
-              <div class="glass-card" style="padding:24px;text-align:center">
-                <div class="section-title" style="margin-bottom:16px">Completion Rate</div>
+              <div class="glass-card" style="padding:var(--space-lg);text-align:center">
+                <div class="section-title" style="margin-bottom:var(--space-md)">Completion Rate</div>
                 <div style="display:flex;justify-content:center;margin-bottom:12px">
                   <canvas id="dash-ring"></canvas>
                 </div>
@@ -456,8 +455,8 @@
               </div>
 
               <!-- Weekly Sparkline -->
-              <div class="glass-card" style="padding:20px">
-                <div class="section-title" style="margin-bottom:12px">This Week</div>
+              <div class="glass-card" style="padding:var(--space-lg)">
+                <div class="section-title" style="margin-bottom:var(--space-sm)">This Week</div>
                 <canvas id="dash-chart" style="width:100%"></canvas>
                 <div style="display:flex;gap:12px;margin-top:8px;font-size:0.68rem;color:var(--text-muted)">
                   <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:#00d4ff;display:inline-block"></span>Done</span>
@@ -466,8 +465,8 @@
               </div>
 
               <!-- Quick Actions -->
-              <div class="glass-card" style="padding:20px">
-                <div class="section-title" style="margin-bottom:12px">Quick Actions</div>
+              <div class="glass-card" style="padding:var(--space-lg)">
+                <div class="section-title" style="margin-bottom:var(--space-sm)">Quick Actions</div>
                 <div style="display:flex;flex-direction:column;gap:8px">
                   <button class="btn btn-ghost w-full" style="justify-content:flex-start;gap:10px" onclick="TaskModal.open()">➕ New Task</button>
                   <button class="btn btn-ghost w-full" style="justify-content:flex-start;gap:10px" onclick="App.showView('calendar')">📅 Calendar</button>
@@ -754,6 +753,15 @@
             </div> <!-- End Right Column -->
           </div>
 
+          <!-- Help & Tutorials -->
+          <div style="margin-top:32px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:24px; border-radius:12px;">
+            <h4 style="font-family:'Orbitron', sans-serif; font-size:1.1rem; color:var(--neon-cyan); margin-bottom:12px;">Help & Tutorials</h4>
+            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:16px;">Replay the interactive onboarding tour to learn about TACTIC's core features.</p>
+            <button class="btn btn-ghost" style="border: 1px solid var(--neon-cyan); color: var(--neon-cyan);" onclick="if(typeof ProductTour !== 'undefined') ProductTour.restartTourFromSettings()">
+              ▶ Replay Product Tour
+            </button>
+          </div>
+
           <div style="margin-top:24px;display:flex;flex-direction:column;gap:12px">
             <div style="display:flex;gap:12px">
               <button class="btn btn-primary" id="settings-save-btn" data-tooltip="Save your preferences">Save Settings</button>
@@ -780,12 +788,11 @@
 
       <!-- Quick Actions -->
       <div class="ai-quick-actions">
-        <button class="ai-quick-btn" onclick="AiChat.respond('Can I finish today?')">Can I finish today?</button>
-        <button class="ai-quick-btn" onclick="AiChat.respond('What should I do next?')">What should I do next?</button>
-        <button class="ai-quick-btn" onclick="AiChat.respond('How much free time do I have?')">How much free time do I have?</button>
-        <button class="ai-quick-btn" onclick="AiChat.respond('When should I study?')">When should I study?</button>
-        <button class="ai-quick-btn" onclick="AiChat.respond('Should I postpone anything?')">Should I postpone anything?</button>
-        <button class="ai-quick-btn" onclick="AiChat.respond('How am I doing today?')">How am I doing today?</button>
+        <button class="ai-quick-btn">Can I finish today?</button>
+        <button class="ai-quick-btn">What should I do next?</button>
+        <button class="ai-quick-btn">How much free time do I have?</button>
+        <button class="ai-quick-btn">When should I study?</button>
+        <button class="ai-quick-btn">Should I postpone anything?</button>
       </div>
 
       <!-- Input -->
@@ -908,6 +915,64 @@
         <button class="btn btn-primary" id="advice-submit-btn">Analyze ✦</button>
       </div>
     </div>
+    </div>
+  </div>
+
+  <!-- ══════════ TOUR OVERLAYS ══════════ -->
+  <div class="welcome-overlay" id="tour-welcome-overlay">
+    <div class="welcome-card">
+      <div class="welcome-title">Welcome to TACTIC</div>
+      <div class="welcome-subtitle">I'll help you plan, prioritize and complete your work before deadlines are missed.</div>
+      <div style="display:flex; justify-content:center; gap:16px; margin-top:20px;">
+        <button class="btn btn-ghost" onclick="ProductTour.skipWelcome()">Skip Tour</button>
+        <button class="btn btn-primary" onclick="ProductTour.startTour()" style="background:var(--neon-cyan); color:#000; font-weight:700; box-shadow:0 0 20px rgba(0,255,255,0.4);">Start Tour ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="celebration-overlay" id="tour-celebration-overlay">
+    <div class="celebration-card">
+      <div class="welcome-title" style="color:var(--neon-green)">✨ You're Ready!</div>
+      <div class="welcome-subtitle">TACTIC is now ready to become your AI productivity companion.</div>
+      <div class="feature-list">
+        <div class="feature-list-item"><span class="feature-icon">✓</span> AI Planning & Scheduling</div>
+        <div class="feature-list-item"><span class="feature-icon">✓</span> Context-Aware AI Coach</div>
+        <div class="feature-list-item"><span class="feature-icon">✓</span> Habit & Goal Tracking</div>
+        <div class="feature-list-item"><span class="feature-icon">✓</span> Advanced Analytics</div>
+      </div>
+      <div style="display:flex; justify-content:center; margin-top:20px;">
+        <button class="btn btn-primary" onclick="ProductTour.startChallenge()" style="background:var(--neon-purple); color:#fff; box-shadow:0 0 20px rgba(168,85,247,0.4);">Start 60-Sec Challenge 🚀</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="challenge-widget" id="challenge-widget">
+    <div class="challenge-header">
+      <span>Quick Challenge</span>
+      <span class="challenge-progress-text" id="chal-count">0 / 5</span>
+    </div>
+    <div class="challenge-bar-bg">
+      <div class="challenge-bar-fill" id="chal-fill"></div>
+    </div>
+    <div class="challenge-task" id="chal-task"><span class="icon">📝</span> Create a Task</div>
+    <div class="challenge-task" id="chal-plan"><span class="icon">⚡</span> Plan My Day</div>
+    <div class="challenge-task" id="chal-ai"><span class="icon">🤖</span> Talk to AI</div>
+    <div class="challenge-task" id="chal-complete"><span class="icon">✅</span> Complete a Task</div>
+    <div class="challenge-task" id="chal-analytics"><span class="icon">📊</span> View Analytics</div>
+  </div>
+
+  <div class="celebration-overlay" id="challenge-success-overlay">
+    <div class="celebration-card">
+      <div class="welcome-title" style="color:var(--neon-purple)">🏆 Congratulations!</div>
+      <div class="welcome-subtitle">You've completed the TACTIC Quick Challenge.</div>
+      <div style="margin:20px 0; font-size:4rem; text-shadow:0 0 40px rgba(255,215,0,0.6);">🏅</div>
+      <div style="font-weight:700; color:#ffd700; margin-bottom:8px;">TACTIC Explorer Badge Unlocked</div>
+      <div style="font-size:0.9rem; color:var(--text-muted); margin-bottom:32px;">You're ready to master your productivity with AI.</div>
+      <div style="display:flex; justify-content:center; gap:16px;">
+        <button class="btn btn-ghost" onclick="ProductTour.restartTourFromSettings(); ProductTour.endChallengeSuccess();">Replay Tour</button>
+        <button class="btn btn-primary" onclick="ProductTour.endChallengeSuccess()" style="background:var(--neon-green); color:#000; box-shadow:0 0 20px rgba(0,255,0,0.4);">Enter Dashboard</button>
+      </div>
+    </div>
   </div>
 
   <!-- ══════════ SCRIPTS ══════════ -->
@@ -932,6 +997,7 @@
   <script src="js/aiContextService.js?v=1"></script>
   <script src="js/aiChatService.js?v=1"></script>
   <script src="js/tacticModal.js"></script>
+  <script src="js/productTour.js"></script>
   <script src="js/app.js?v=3"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="GCal.init()"></script>
 

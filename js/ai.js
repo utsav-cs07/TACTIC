@@ -84,14 +84,20 @@ const AI = (() => {
 
     parseTime(text) {
       const t = text.toLowerCase();
-      // Match "at 3pm", "by 5pm", "before 14:30", or just "5pm"
-      const timeMatch = t.match(/(?:at|by|before)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+      // Match "at 3pm", "by 5", "till 11", "before 14:30", or just "5pm"
+      const timeMatch = t.match(/(?:(at|by|before|till|until)\s+(\d{1,2})(?::(\d{2}))?(?:\s*(am|pm))?\b)|(?:(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b)/);
       if (timeMatch) {
-        let h = parseInt(timeMatch[1]);
-        const m = parseInt(timeMatch[2] || '0');
-        const mer = timeMatch[3];
-        if (mer === 'pm' && h < 12) h += 12;
-        if (mer === 'am' && h === 12) h = 0;
+        let h = parseInt(timeMatch[2] || timeMatch[5]);
+        const m = parseInt(timeMatch[3] || timeMatch[6] || '0');
+        const mer = timeMatch[4] || timeMatch[7];
+        
+        if (!mer) {
+          // If no am/pm specified, assume PM for 1-11
+          if (h >= 1 && h <= 11) h += 12;
+        } else {
+          if (mer === 'pm' && h < 12) h += 12;
+          if (mer === 'am' && h === 12) h = 0;
+        }
         return { h, m };
       }
       // "noon" / "midnight"
@@ -124,7 +130,7 @@ const AI = (() => {
       return text
         .replace(/^(add|create|remind me to|schedule|set|new task|i need to)\s*/i, '')
         .replace(/(today|tomorrow|next week|in \d+ days?|on (monday|tuesday|wednesday|thursday|friday|saturday|sunday))/gi, '')
-        .replace(/(?:at|by|before)?\s*\d{1,2}(?::\d{2})?\s*(am|pm)\b/gi, '')
+        .replace(/(?:(?:at|by|before|till|until)\s+\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?\b)|(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)\b)/gi, '')
         .replace(/\b(noon|midnight|morning|evening|night)\b/gi, '')
         .replace(/(urgent|asap|critical|high priority|low priority)/gi, '')
         .replace(/\s+/g, ' ')
@@ -270,7 +276,7 @@ const AI = (() => {
   // ── Chat Responses ──
   const responses = {
     greet: ["Hello! I'm TACTIC OS, your AI productivity companion. How can I help you today?", "Hey there! Ready to boost your productivity? What's on your mind?", "Welcome back! Your productivity score is looking sharp. What shall we tackle?"],
-    addTask: (title) => `Got it! I've added "${title}" to your tasks and auto-assigned priority based on context. Want me to suggest a time slot?`,
+    addTask: (title, hasTime) => `Got it! I've added "${title}" to your tasks and auto-assigned priority.${hasTime ? ' I also set the deadline you mentioned.' : ' Want me to suggest a time slot?'}`,
     noTasks: ["You're all caught up! 🎉 No pending tasks. Perfect time to plan ahead.", "Clean slate! Want me to suggest some goals or habits to build?"],
     help: `Here's what I can do:\n• **Add tasks**: "Add meeting with team tomorrow at 3pm"\n• **Prioritize**: "What should I focus on?"\n• **Schedule**: "Schedule my tasks for today"\n• **Stats**: "How am I doing?"\n• **Habits**: "Track my morning run"\n• Just ask naturally!`,
     prioritize: (tasks) => `Based on AI scoring, here's your priority order:\n${tasks.slice(0,5).map((t,i) => `${i+1}. ${t.title} (${t.priority})`).join('\n')}`,
@@ -340,7 +346,8 @@ User says: "${prompt}"`;
       if (/^(add|create|remind|schedule|set|new task|i need to|remind me to)\b/.test(t)) {
         const parsed = parseCommand(input);
         if (parsed.title && parsed.title.length > 2) {
-          return { type: 'add_task', data: parsed, text: responses.addTask(parsed.title) };
+          const hasTime = input.match(/(?:at|by|before|till|until)\s+\d{1,2}|am\b|pm\b/i);
+          return { type: 'add_task', data: parsed, text: responses.addTask(parsed.title, hasTime) };
         }
       }
 

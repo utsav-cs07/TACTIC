@@ -136,16 +136,14 @@ const Onboarding = (() => {
     if (step === 2) {
       const wake = document.getElementById('ob-wakeup').value;
       const sleep = document.getElementById('ob-sleep').value;
-      const wStart = document.getElementById('ob-workstart').value;
-      const wEnd = document.getElementById('ob-workend').value;
+      const lunch = document.getElementById('ob-lunch').value;
 
-      if (!wake) { showToast('Wake-up time is required', 'warning'); return false; }
+      if (!wake) { showToast('Wake up time is required', 'warning'); return false; }
       if (!sleep) { showToast('Sleep time is required', 'warning'); return false; }
-      if (!wStart) { showToast('Work/College start time is required', 'warning'); return false; }
-      if (!wEnd) { showToast('Work/College end time is required', 'warning'); return false; }
+      if (!lunch) { showToast('Lunch time is required', 'warning'); return false; }
       
       const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      if (!timeRegex.test(wake) || !timeRegex.test(sleep) || !timeRegex.test(wStart) || !timeRegex.test(wEnd)) {
+      if (!timeRegex.test(wake) || !timeRegex.test(sleep)) {
         showToast('Please enter valid times in HH:MM format', 'warning');
         return false;
       }
@@ -276,6 +274,15 @@ const Onboarding = (() => {
         if (nextBtn) nextBtn.disabled = false;
         if (prevBtn) prevBtn.disabled = false;
         if (footerNav) footerNav.style.display = 'flex';
+
+        // Trigger Interactive Product Tour if not completed
+        if (typeof ProductTour !== 'undefined') {
+          DB.getTutorialState().then(tutorial => {
+            if (!tutorial.tourCompleted) {
+              ProductTour.startWelcome();
+            }
+          });
+        }
       }, 2500);
 
     } catch (err) {

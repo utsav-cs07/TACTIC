@@ -154,7 +154,7 @@ const DB = (() => {
   /* ── MIGRATION: localStorage → Firestore ── */
 
   async function migrateLocalToFirestore() {
-    const localTasks = JSON.parse(localStorage.getItem('nexus_tasks') || '[]');
+    const localTasks = JSON.parse(localStorage.getItem('nexus_tasks') || '[]').filter(t => !t.isDemo);
     if (!localTasks.length) return;
 
     try {
@@ -177,13 +177,13 @@ const DB = (() => {
       });
 
       // Migrate Habits
-      const localHabits = JSON.parse(localStorage.getItem('nexus_habits') || '[]');
+      const localHabits = JSON.parse(localStorage.getItem('nexus_habits') || '[]').filter(h => !h.isDemo);
       localHabits.forEach(h => {
         batch.set(getUserPath('habits').doc(h.id), h);
       });
 
       // Migrate Goals
-      const localGoals = JSON.parse(localStorage.getItem('nexus_goals') || '[]');
+      const localGoals = JSON.parse(localStorage.getItem('nexus_goals') || '[]').filter(g => !g.isDemo);
       localGoals.forEach(g => {
         batch.set(getUserPath('goals').doc(g.id), {
           ...g,
@@ -223,7 +223,7 @@ const DB = (() => {
 
       // Safeguard: If Firestore is empty but local storage has tasks, do not overwrite local storage.
       // This prevents the race condition during migration.
-      const localTasks = JSON.parse(localStorage.getItem('nexus_tasks') || '[]');
+      const localTasks = JSON.parse(localStorage.getItem('nexus_tasks') || '[]').filter(t => !t.isDemo);
       if (tasks.length === 0 && localTasks.length > 0) {
         console.log('[DB] Firestore is empty but localStorage has tasks — skipping overwrite for migration');
         return true;
@@ -396,5 +396,36 @@ const DB = (() => {
     }
   }
 
-  return { init, getTasks, addTask, updateTask, deleteTask, saveHabits, saveGoals, subscribeToTasks, unsubscribeAll, loadFromFirestore, migrateLocalToFirestore, getMode, getIcon, getRoutine, saveRoutine, getUserProfile, getCachedProfile: () => cachedProfile, saveUserProfileAndSettings, getDailyPlan, saveDailyPlan };
+  async function getTutorialState() {
+    if (isFirestore) {
+      try {
+        const doc = await db.collection('users').doc(userId).get();
+        if (doc.exists) {
+          const t = doc.data()?.settings?.tutorial;
+          if (t) return t;
+        }
+      } catch (e) { console.warn('[DB] Failed to fetch tutorial state:', e); }
+    } else {
+      return JSON.parse(localStorage.getItem('nexus_tutorial') || '{"onboardingCompleted": false, "quickChallengeCompleted": false}');
+    }
+    return { onboardingCompleted: false, quickChallengeCompleted: false };
+  }
+
+  async function saveTutorialState(state) {
+    if (isFirestore) {
+      try {
+        const updatePayload = {
+          settings: {
+            tutorial: state
+          }
+        };
+        await db.collection('users').doc(userId).set(updatePayload, { merge: true });
+        console.log('[DB] Tutorial state saved to cloud');
+      } catch (e) { console.warn('[DB] Failed to save tutorial state:', e); }
+    } else {
+      localStorage.setItem('nexus_tutorial', JSON.stringify(state));
+    }
+  }
+
+  return { init, getTasks, addTask, updateTask, deleteTask, saveHabits, saveGoals, subscribeToTasks, unsubscribeAll, loadFromFirestore, migrateLocalToFirestore, getMode, getIcon, getRoutine, saveRoutine, getUserProfile, getCachedProfile: () => cachedProfile, saveUserProfileAndSettings, getDailyPlan, saveDailyPlan, getTutorialState, saveTutorialState };
 })();

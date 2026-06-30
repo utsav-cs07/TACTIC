@@ -124,6 +124,10 @@ const UI = {
     if (view) view.classList.add('active');
     this.setActiveNav(viewId);
     
+    if (viewId === 'analytics' && typeof ProductTour !== 'undefined') {
+      ProductTour.onAnalyticsViewed();
+    }
+    
     const title = { dashboard: 'Dashboard', tasks: 'Tasks', calendar: 'Calendar', habits: 'Habits & Goals', analytics: 'Analytics', settings: 'Settings' };
     const topTitle = $('topbar-title');
     
@@ -244,6 +248,7 @@ const TaskModal = {
 /* ── AI Chat ── */
 const AiChat = {
   messages: [],
+  isProcessing: false,
 
   open() {
     const panel = $('ai-panel');
@@ -328,33 +333,57 @@ const AiChat = {
   },
 
   async respond(input) {
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+
+    // Disable quick buttons
+    const quickBtns = document.querySelectorAll('.ai-quick-btn');
+    quickBtns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+
     this.addMessage('user', input);
     this.showTyping();
+    
+    if (typeof ProductTour !== 'undefined') {
+      ProductTour.onAiChat();
+    }
 
-    await new Promise(r => setTimeout(r, 600 + Math.random() * 600));
+    try {
+      await new Promise(r => setTimeout(r, 600 + Math.random() * 600));
 
-    if (typeof AIContextService !== 'undefined' && typeof AIChatService !== 'undefined') {
-      const context = AIContextService.buildContext();
-      const result = AIChatService.processQuery(input, context);
-      this.removeTyping();
-      this.addStructuredMessage('ai', result);
-    } else {
-      const result = await AI.processInput(input, Tasks.getAll());
-      this.removeTyping();
-      this.addMessage('ai', result.text);
+      const t = input.toLowerCase().trim();
+      const isAction = /^(add|create|remind|schedule|set|new task|i need to|remind me to)\b/.test(t);
 
-      if (result.type === 'add_task' && result.data) {
-        const createdTask = Tasks.create(result.data);
-        if (typeof DB !== 'undefined') DB.addTask(createdTask);
-        App.renderCurrentView();
-        App.updateBadges();
-        showToast('Task created via AI! 🤖', 'success');
-        Notifications.scheduleAll(Tasks.getAll());
+      if (!isAction && typeof AIContextService !== 'undefined' && typeof AIChatService !== 'undefined') {
+        const context = AIContextService.buildContext();
+        const result = AIChatService.processQuery(input, context);
+        this.removeTyping();
+        this.addStructuredMessage('ai', result);
+      } else {
+        const result = await AI.processInput(input, Tasks.getAll());
+        this.removeTyping();
+        this.addMessage('ai', result.text);
+
+        if (result.type === 'add_task' && result.data) {
+          const createdTask = Tasks.create(result.data);
+          if (typeof DB !== 'undefined') DB.addTask(createdTask);
+          App.renderCurrentView();
+          App.updateBadges();
+          showToast('Task created via AI! 🤖', 'success');
+          Notifications.scheduleAll(Tasks.getAll());
+        }
       }
+    } catch (e) {
+      this.removeTyping();
+      this.addMessage('ai', 'Sorry, I encountered an error. Please try again.');
+      console.error('AI Error:', e);
+    } finally {
+      this.isProcessing = false;
+      quickBtns.forEach(b => { b.disabled = false; b.style.opacity = '1'; b.style.pointerEvents = 'auto'; });
     }
   },
 
   sendMessage() {
+    if (this.isProcessing) return;
     const input = $('ai-chat-input');
     if (!input) return;
     const text = input.value.trim();
@@ -1297,6 +1326,9 @@ const Dashboard = {
         } else {
           barClass = 'task-low';
         }
+      } else if (block.type === 'free') {
+        icon = '✨';
+        barClass = 'free-block';
       } else if (block.type === 'break') {
         icon = '☕';
         barClass = 'routine';
@@ -1374,6 +1406,7 @@ const Dashboard = {
         <div class="gantt-legend-item" data-cat="habit"><div class="gantt-legend-dot" style="background: var(--gantt-habit-bg);"></div> Habit</div>
         <div class="gantt-legend-item" data-cat="goal"><div class="gantt-legend-dot" style="background: var(--gantt-goal-bg);"></div> Goal</div>
         <div class="gantt-legend-item" data-cat="study"><div class="gantt-legend-dot" style="background: var(--gantt-study-bg);"></div> Study</div>
+        <div class="gantt-legend-item" data-cat="free"><div class="gantt-legend-dot" style="background: rgba(255,255,255,0.2); border: 1px dashed rgba(255,255,255,0.4);"></div> Focus Block</div>
         <div class="gantt-legend-item" data-cat="completed"><div class="gantt-legend-dot" style="background: var(--gantt-completed-bg);"></div> Completed</div>
       </div>
     `;
@@ -1589,6 +1622,15 @@ const App = {
       } else {
         const obScreen = document.getElementById('onboarding-screen');
         if (obScreen) obScreen.style.display = 'none';
+
+        // Trigger tour for new Guest users who skip the onboarding flow
+        if (user && user.isGuest && typeof ProductTour !== 'undefined') {
+          DB.getTutorialState().then(tutorial => {
+            if (!tutorial.tourCompleted) {
+              ProductTour.startWelcome();
+            }
+          });
+        }
       }
 
       UI.showView(this.currentView);

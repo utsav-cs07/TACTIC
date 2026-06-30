@@ -142,6 +142,7 @@ const Auth = (() => {
     // Also handle settings buttons
     const btnLoginSett = document.getElementById('auth-login-btn-settings');
     const btnLogoutSett = document.getElementById('auth-logout-btn');
+    const demoBadge = document.getElementById('demo-badge');
 
     if (currentUser && !currentUser.isGuest) {
       if (avatar) {
@@ -158,6 +159,7 @@ const Auth = (() => {
       
       if (btnLoginSett) btnLoginSett.style.display = 'none';
       if (btnLogoutSett) btnLogoutSett.style.display = 'block';
+      if (demoBadge) demoBadge.style.display = 'none';
 
       const syncBadge = document.getElementById('sync-badge');
       if (syncBadge) { syncBadge.style.display = 'flex'; syncBadge.textContent = '☁ Synced'; }
@@ -169,6 +171,7 @@ const Auth = (() => {
       
       if (btnLoginSett) btnLoginSett.style.display = 'block';
       if (btnLogoutSett) btnLogoutSett.style.display = 'none';
+      if (demoBadge && currentUser && currentUser.isGuest) demoBadge.style.display = 'flex';
 
       const syncBadge = document.getElementById('sync-badge');
       if (syncBadge) { syncBadge.style.display = 'flex'; syncBadge.textContent = '💾 Local'; syncBadge.style.color = 'var(--text-muted)'; }
@@ -184,42 +187,61 @@ const Auth = (() => {
   }
 
   function continueAsGuest() {
+    window.isGuestMode = true;
     currentUser = { uid: 'local-guest', displayName: 'Guest User', email: '', photoURL: null, isGuest: true };
     updateUI();
     
     const splash = document.getElementById('splash-screen');
     if (splash) splash.style.display = 'none';
     
-    showToast('Continuing as Guest. Data is saved locally but not synced to the cloud.', 'info', 6000);
+    showToast('Entering Guest Demo Mode...', 'info', 3000);
     
-    // Seed 2 default tasks if empty for Hackathon Judges
+    // Clear localStorage to ensure fresh demo state
+    localStorage.clear();
+    
+    const now = new Date();
+    const d = (offsetDays, h = 10, m = 0) => {
+      const dt = new Date(now); dt.setDate(dt.getDate() + offsetDays); dt.setHours(h, m, 0, 0); return dt.toISOString();
+    };
+
+    // Rich Demo Tasks
+    const demoTasks = [
+      { id: Tasks.uid(), isDemo: true, title: 'Complete Machine Learning Assignment', desc: 'Implement neural network from scratch', category: 'work', priority: 'critical', dueDate: d(0, 15, 0), completed: false, estimatedMins: 120, tags: ['ML', 'urgent'] },
+      { id: Tasks.uid(), isDemo: true, title: 'Prepare for TOC Exam', desc: 'Revise automata and Turing machines', category: 'work', priority: 'high', dueDate: d(1, 10, 0), completed: false, estimatedMins: 90, tags: ['exam'] },
+      { id: Tasks.uid(), isDemo: true, title: 'Submit Hackathon Project', desc: 'Finalize TACTIC codebase', category: 'work', priority: 'critical', dueDate: d(0, 23, 59), completed: false, estimatedMins: 180, tags: ['hackathon'] },
+      { id: Tasks.uid(), isDemo: true, title: 'Revise DBMS', desc: 'SQL queries and normalization', category: 'work', priority: 'medium', dueDate: d(2, 14, 0), completed: false, estimatedMins: 60, tags: ['dbms'] },
+      { id: Tasks.uid(), isDemo: true, title: 'Gym Workout', desc: 'Pull day', category: 'health', priority: 'high', dueDate: d(0, 18, 0), completed: true, estimatedMins: 60, tags: ['fitness'] }
+    ];
+
+    // Rich Demo Habits
+    const demoHabits = [
+      { id: Habits.uid ? Habits.uid() : Tasks.uid(), isDemo: true, name: 'Drink Water', icon: '💧', color: '#00d4ff', streak: 12, target: 'daily' },
+      { id: Habits.uid ? Habits.uid() : Tasks.uid(), isDemo: true, name: 'Read 30 Minutes', icon: '📚', color: '#a855f7', streak: 5, target: 'daily' },
+      { id: Habits.uid ? Habits.uid() : Tasks.uid(), isDemo: true, name: 'Exercise', icon: '🏋️', color: '#00ff88', streak: 3, target: 'daily' },
+      { id: Habits.uid ? Habits.uid() : Tasks.uid(), isDemo: true, name: 'Meditation', icon: '🧘', color: '#ffb800', streak: 8, target: 'daily' }
+    ];
+
+    // Rich Demo Goals
+    const demoGoals = [
+      { id: Habits.uid ? Habits.uid() : Tasks.uid(), isDemo: true, name: 'Maintain 90% Attendance', icon: '🎓', color: '#00d4ff', milestones: [{id: 1, title: 'September', done: true}, {id: 2, title: 'October', done: false}] },
+      { id: Habits.uid ? Habits.uid() : Tasks.uid(), isDemo: true, name: 'Learn Azure Data Engineering', icon: '☁️', color: '#0088ff', milestones: [{id: 1, title: 'Data Factory', done: true}, {id: 2, title: 'Databricks', done: false}] },
+      { id: Habits.uid ? Habits.uid() : Tasks.uid(), isDemo: true, name: 'Complete Semester Project', icon: '🚀', color: '#a855f7', milestones: [{id: 1, title: 'Phase 1', done: true}, {id: 2, title: 'Phase 2', done: false}] }
+    ];
+
     setTimeout(() => {
-      if (typeof Tasks !== 'undefined' && typeof DB !== 'undefined' && Tasks.getAll().length === 0) {
-        const t1 = Tasks.create({
-          title: 'Review NEXUS AI Architecture',
-          desc: 'Explore the source code, check the AI parsing logic in parser.js, and evaluate the prompt engineering.',
-          category: 'work',
-          priority: 'critical',
-          dueDate: new Date().toISOString(),
-          estimatedMins: 30
-        });
-        const t2 = Tasks.create({
-          title: 'Test AI Task Extraction',
-          desc: 'Upload a sample datesheet image or CSV to watch the AI automatically parse and prioritize exams.',
-          category: 'personal',
-          priority: 'high',
-          dueDate: new Date(Date.now() + 86400000).toISOString(),
-          estimatedMins: 15
-        });
-        DB.addTask(t1);
-        DB.addTask(t2);
-        if (typeof App !== 'undefined') {
-          App.renderCurrentView();
-          App.updateBadges();
-        }
-        showToast('Loaded default tasks for Guest Mode.', 'info');
+      if (typeof Tasks !== 'undefined' && typeof Tasks.setDemoData === 'function') Tasks.setDemoData(demoTasks);
+      if (typeof Habits !== 'undefined' && typeof Habits.setDemoData === 'function') Habits.setDemoData(demoHabits);
+      if (typeof Habits !== 'undefined' && typeof Habits.setDemoGoals === 'function') Habits.setDemoGoals(demoGoals);
+      
+      if (typeof App !== 'undefined') {
+        App.renderCurrentView();
+        App.updateBadges();
       }
-    }, 500);
+      
+      if (typeof ProductTour !== 'undefined') {
+        ProductTour.start();
+      }
+    }, 300);
   }
 
   return { init, signInWithGoogle, signInForCalendar, signOut, getUser, isLoggedIn, getAccessToken, updateUI, splashSignInWithGoogle, continueAsGuest };

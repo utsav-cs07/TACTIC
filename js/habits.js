@@ -14,34 +14,56 @@ const Habits = (() => {
 
   function load() {
     try {
-      habits = JSON.parse(localStorage.getItem(STORAGE_KEY)) || getSampleHabits();
-      goals  = JSON.parse(localStorage.getItem(GOAL_KEY))    || getSampleGoals();
+      const hStr = localStorage.getItem(STORAGE_KEY);
+      const gStr = localStorage.getItem(GOAL_KEY);
+      const isAuth = typeof Auth !== 'undefined' && Auth.isLoggedIn();
+      
+      let parsedHabits = hStr ? JSON.parse(hStr) : (isAuth ? [] : getSampleHabits());
+      let parsedGoals  = gStr ? JSON.parse(gStr) : (isAuth ? [] : getSampleGoals());
+      
+      if (isAuth) {
+        parsedHabits = parsedHabits.filter(h => !h.isDemo);
+        parsedGoals = parsedGoals.filter(g => !g.isDemo);
+      }
+      
+      habits = parsedHabits;
+      goals = parsedGoals;
     } catch {
-      habits = getSampleHabits();
-      goals  = getSampleGoals();
+      const isAuth = typeof Auth !== 'undefined' && Auth.isLoggedIn();
+      habits = isAuth ? [] : getSampleHabits();
+      goals  = isAuth ? [] : getSampleGoals();
     }
   }
 
   function save() {
+    if (window.isGuestMode) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
     localStorage.setItem(GOAL_KEY, JSON.stringify(goals));
   }
 
+  function setDemoData(demoHabits) {
+    habits = demoHabits;
+  }
+
+  function setDemoGoals(demoGoals) {
+    goals = demoGoals;
+  }
+
   function getSampleHabits() {
     return [
-      { id: uid(), name: 'Morning meditation', icon: '🧘', color: '#a855f7', streak: 7,  completedDates: generatePastDates(7),  target: 'daily',   createdAt: new Date(Date.now() - 7*864e5).toISOString() },
-      { id: uid(), name: 'Exercise 30 mins',   icon: '🏃', color: '#00ff88', streak: 14, completedDates: generatePastDates(14), target: 'daily',   createdAt: new Date(Date.now() - 14*864e5).toISOString() },
-      { id: uid(), name: 'Read 20 pages',       icon: '📚', color: '#00d4ff', streak: 5,  completedDates: generatePastDates(5),  target: 'daily',   createdAt: new Date(Date.now() - 5*864e5).toISOString() },
-      { id: uid(), name: 'Drink 8 glasses water', icon: '💧', color: '#3b82f6', streak: 21, completedDates: generatePastDates(21), target: 'daily', createdAt: new Date(Date.now() - 21*864e5).toISOString() },
-      { id: uid(), name: 'Weekly deep work',   icon: '⚡', color: '#ffb800', streak: 3,  completedDates: generatePastWeeks(3), target: 'weekly',  createdAt: new Date(Date.now() - 21*864e5).toISOString() },
+      { id: uid(), isDemo: true, name: 'Morning meditation', icon: '🧘', color: '#a855f7', streak: 7,  completedDates: generatePastDates(7),  target: 'daily',   createdAt: new Date(Date.now() - 7*864e5).toISOString() },
+      { id: uid(), isDemo: true, name: 'Exercise 30 mins',   icon: '🏃', color: '#00ff88', streak: 14, completedDates: generatePastDates(14), target: 'daily',   createdAt: new Date(Date.now() - 14*864e5).toISOString() },
+      { id: uid(), isDemo: true, name: 'Read 20 pages',       icon: '📚', color: '#00d4ff', streak: 5,  completedDates: generatePastDates(5),  target: 'daily',   createdAt: new Date(Date.now() - 5*864e5).toISOString() },
+      { id: uid(), isDemo: true, name: 'Drink 8 glasses water', icon: '💧', color: '#3b82f6', streak: 21, completedDates: generatePastDates(21), target: 'daily', createdAt: new Date(Date.now() - 21*864e5).toISOString() },
+      { id: uid(), isDemo: true, name: 'Weekly deep work',   icon: '⚡', color: '#ffb800', streak: 3,  completedDates: generatePastWeeks(3), target: 'weekly',  createdAt: new Date(Date.now() - 21*864e5).toISOString() },
     ];
   }
 
   function getSampleGoals() {
     return [
-      { id: uid(), title: 'Launch personal project', icon: '🚀', deadline: new Date(Date.now() + 30*864e5).toISOString(), milestones: [{ t: 'Design MVP', done: true }, { t: 'Build core features', done: true }, { t: 'User testing', done: false }, { t: 'Launch', done: false }], color: '#00d4ff' },
-      { id: uid(), title: 'Get fit for summer',       icon: '💪', deadline: new Date(Date.now() + 60*864e5).toISOString(), milestones: [{ t: 'Set workout schedule', done: true }, { t: 'Lose 5kg', done: false }, { t: 'Run 5K', done: false }], color: '#00ff88' },
-      { id: uid(), title: 'Learn new skill (ML)',     icon: '🧠', deadline: new Date(Date.now() + 90*864e5).toISOString(), milestones: [{ t: 'Finish online course', done: true }, { t: 'Build practice project', done: false }, { t: 'Apply at work', done: false }], color: '#a855f7' },
+      { id: uid(), isDemo: true, title: 'Launch personal project', icon: '🚀', deadline: new Date(Date.now() + 30*864e5).toISOString(), milestones: [{ t: 'Design MVP', done: true }, { t: 'Build core features', done: true }, { t: 'User testing', done: false }, { t: 'Launch', done: false }], color: '#00d4ff' },
+      { id: uid(), isDemo: true, title: 'Get fit for summer',       icon: '💪', deadline: new Date(Date.now() + 60*864e5).toISOString(), milestones: [{ t: 'Set workout schedule', done: true }, { t: 'Lose 5kg', done: false }, { t: 'Run 5K', done: false }], color: '#00ff88' },
+      { id: uid(), isDemo: true, title: 'Learn new skill (ML)',     icon: '🧠', deadline: new Date(Date.now() + 90*864e5).toISOString(), milestones: [{ t: 'Finish online course', done: true }, { t: 'Build practice project', done: false }, { t: 'Apply at work', done: false }], color: '#a855f7' },
     ];
   }
 
@@ -151,5 +173,5 @@ const Habits = (() => {
     return cells;
   }
 
-  return { load, save, getHabits, getGoals, createHabit, toggleHabitToday, isDoneToday, calcStreak, deleteHabit, createGoal, toggleMilestone, addMilestone, deleteGoal, getGoalProgress, getHeatmapData };
+  return { load, save, getHabits, getGoals, createHabit, toggleHabitToday, isDoneToday, calcStreak, deleteHabit, createGoal, toggleMilestone, addMilestone, deleteGoal, getGoalProgress, getHeatmapData, setDemoData, setDemoGoals, get habits() { return habits; }, set habits(v) { habits = v; } };
 })();

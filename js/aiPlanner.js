@@ -195,11 +195,18 @@ const AIPlannerService = (() => {
       });
     }
 
-    timeline.sort((a, b) => a.startMins - b.startMins);
-
     // Calculate Remaining Free Study Time
     const finalFreeSlots = getFreeSlots();
     const remainingStudyMins = finalFreeSlots.reduce((acc, s) => acc + s.duration, 0);
+
+    // Add Available Focus Blocks to timeline
+    finalFreeSlots.forEach(slot => {
+      if (slot.duration >= 30) {
+        addBlock('Available Focus Block ✨', slot.startMins, slot.endMins, 'free');
+      }
+    });
+
+    timeline.sort((a, b) => a.startMins - b.startMins);
     
     // Generate Goal Suggestions
     const goalSuggestions = [];
@@ -277,6 +284,10 @@ const AIPlannerService = (() => {
 
     if (typeof DB !== 'undefined') {
       await DB.saveDailyPlan(todayStr, planData);
+    }
+    
+    if (typeof ProductTour !== 'undefined') {
+      ProductTour.onPlanGenerated();
     }
 
     return planData;
