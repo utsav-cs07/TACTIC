@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="description" content="TACTIC — Your intelligent productivity companion that plans, prioritizes, and helps you crush every deadline.">
+  <meta name="theme-color" content="#03030a">
+  <title>TACTIC — Intelligent Productivity Companion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/gantt.css">
+
+  <!-- Firebase SDK (v9 compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics-compat.js"></script>
+</head>
+<body>
+  <!-- ══════════ SPLASH / LOGIN SCREEN ══════════ -->
+  <div class="modal-overlay open" id="splash-screen" style="z-index: 99999; backdrop-filter: blur(25px); background: rgba(3,3,10,0.85); display: none;">
+    <div class="modal" style="max-width: 450px; text-align: center; padding: 40px 30px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 0 40px rgba(168,85,247,0.15);">
+      <img src="logo.png" alt="TACTIC Logo" style="width: 80px; height: 80px; border-radius: 4px; border: 2px solid var(--neon-green); margin: 0 auto 20px; display: block; box-shadow: 0 0 30px rgba(0,255,0,0.4); object-fit: cover;">
+      <h2 style="font-size: 1.8rem; margin-bottom: 10px; font-weight: 800; color: var(--neon-green); font-family: 'Orbitron', sans-serif; font-style: italic; text-transform: uppercase;">Welcome to TACTIC</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 30px; line-height: 1.5;">Your intelligent productivity companion. Plan, prioritize, and crush every deadline with AI.</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 15px;">
+        <button class="btn btn-primary" onclick="Auth.splashSignInWithGoogle()" style="padding: 14px; font-size: 1rem; font-weight: 600; box-shadow: 0 0 20px rgba(0,255,0,0.3); background: var(--neon-green); color: #000; border-radius: 4px; border: none; font-family: 'Orbitron', sans-serif; text-transform: uppercase;">
+          ☁️ Sign in with Google
+        </button>
+        <button class="btn btn-ghost" onclick="Auth.continueAsGuest()" style="padding: 14px; font-size: 1rem; color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1);">
+          Continue as Guest
+        </button>
+      </div>
+      <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 25px;">Google Sign-in is recommended for Calendar sync & cloud backup.</p>
+    </div>
+  </div>
+
+  <!-- ══════════ ONBOARDING OVERLAY ══════════ -->
+  <div class="onboarding-overlay" id="onboarding-screen" style="display: none;">
+    <div class="onboarding-card">
+      
+      <!-- Top Section -->
+      <div class="ob-header">
+        <h2>Let's Build Your Productivity Profile</h2>
+        <p>Customize your AI planner so it can automatically create realistic schedules tailored for you.</p>
+      </div>
+
+      <!-- User Info Badge -->
+      <div class="ob-user-badge" id="ob-user-badge">
+        <div class="ob-user-photo-fallback" id="ob-user-photo-placeholder">U</div>
+        <img src="" alt="Profile" class="ob-user-photo" id="ob-user-photo" referrerpolicy="no-referrer" style="display:none">
+        <span class="ob-user-email" id="ob-user-email">email@domain.com</span>
+      </div>
+
+      <!-- Progress Stepper -->
+      <div class="ob-progress-container">
+        <div class="ob-progress-bar">
+          <div class="ob-progress-line"></div>
+          <div class="ob-progress-line-active" id="ob-progress-line-active"></div>
+          
+          <div class="ob-progress-step active" id="ob-step-dot-1">1</div>
+          <div class="ob-progress-step" id="ob-step-dot-2">2</div>
+          <div class="ob-progress-step" id="ob-step-dot-3">3</div>
+        </div>
+        <div class="ob-step-label" id="ob-step-label">Step 1 of 3: About You</div>
+      </div>
+
+      <!-- Step Content Container -->
+      <div style="flex:1; margin-bottom:20px;">
+        
+        <!-- STEP 1: About You -->
+        <div class="ob-step-content active" id="ob-step-1">
+          <div style="display:flex; flex-direction:column; gap:16px; max-width:500px; margin: 0 auto;">
+            <div class="form-group">
+              <label class="form-label">Full Name *</label>
+              <input type="text" class="form-input" id="ob-fullname" placeholder="Enter your full name" required>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">Age *</label>
+              <input type="number" class="form-input" id="ob-age" min="1" max="120" placeholder="Enter your age" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Role *</label>
+              <select class="form-input" id="ob-role" required style="background:var(--bg-surface); color:#fff; border: 1px solid var(--glass-border);">
+                <option value="" disabled selected>Select your role</option>
+                <option value="Student">Student</option>
+                <option value="Working Professional">Working Professional</option>
+                <option value="Freelancer">Freelancer</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Email (Read-only)</label>
+              <input type="email" class="form-input" id="ob-email-readonly" readonly style="opacity:0.6; cursor:not-allowed;">
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 2: Daily Routine -->
+        <div class="ob-step-content" id="ob-step-2">
+          <div class="ob-grid-step2">
+            <!-- Left Column: Inputs -->
+            <div style="display:flex; flex-direction:column; gap:14px;">
+              <h3 style="font-size:1.05rem; margin-bottom:5px; color:var(--neon-cyan); font-family:'Orbitron',sans-serif;">Tell TACTIC about your normal day</h3>
+              <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:10px;">Don't worry — you can temporarily change today's routine anytime from Settings.</p>
+              
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label class="form-label">Wake-up Time *</label>
+                  <input type="time" class="form-input" id="ob-wakeup" required value="07:00">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Sleep Time *</label>
+                  <input type="time" class="form-input" id="ob-sleep" required value="23:00">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">College / Work Start *</label>
+                  <input type="time" class="form-input" id="ob-workstart" required value="09:00">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">College / Work End *</label>
+                  <input type="time" class="form-input" id="ob-workend" required value="17:00">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Travel Time (mins)</label>
+                  <input type="number" class="form-input" id="ob-travel" min="0" placeholder="0" value="45">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Gym Time (Optional)</label>
+                  <input type="time" class="form-input" id="ob-gym" value="18:00">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Lunch Time (Optional)</label>
+                  <input type="time" class="form-input" id="ob-lunch" value="13:00">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Dinner Time (Optional)</label>
+                  <input type="time" class="form-input" id="ob-dinner" value="20:00">
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Visual Timeline Preview -->
+            <div class="visual-timeline-container">
+              <div class="visual-timeline-title">Live 24h Timeline</div>
+              <div class="visual-timeline" id="ob-timeline">
+                <!-- 24h helper grid lines -->
+                <div class="visual-timeline-axis-line" style="top: 0%"><span class="visual-timeline-axis-label">12 AM</span></div>
+                <div class="visual-timeline-axis-line" style="top: 25%"><span class="visual-timeline-axis-label">6 AM</span></div>
+                <div class="visual-timeline-axis-line" style="top: 50%"><span class="visual-timeline-axis-label">12 PM</span></div>
+                <div class="visual-timeline-axis-line" style="top: 75%"><span class="visual-timeline-axis-label">6 PM</span></div>
+                <div class="visual-timeline-axis-line" style="top: 100%"><span class="visual-timeline-axis-label">12 AM</span></div>
+                
+                <!-- Dynamic block renders will be inserted here by JavaScript -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3: Study & Productivity Preferences -->
+        <div class="ob-step-content" id="ob-step-3">
+          <div style="display:flex; flex-direction:column; gap:20px; max-width:500px; margin: 0 auto;">
+            <h3 style="font-size:1.05rem; margin-bottom:5px; color:var(--neon-purple); font-family:'Orbitron',sans-serif; text-align:center;">How do you like to work?</h3>
+            
+            <div class="form-group">
+              <label class="form-label">Preferred Study Session Duration *</label>
+              <select class="form-input" id="ob-studydur" required style="background:var(--bg-surface); color:#fff; border: 1px solid var(--glass-border);">
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
+                <option value="60">60 min</option>
+                <option value="90" selected>90 min</option>
+                <option value="120">120 min</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Preferred Pomodoro Interval *</label>
+              <select class="form-input" id="ob-pomodoro" required style="background:var(--bg-surface); color:#fff; border: 1px solid var(--glass-border);">
+                <option value="25" selected>25 / 5 (Classic)</option>
+                <option value="50">50 / 10 (Long)</option>
+                <option value="15">15 / 3 (Short Focus)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Peak Focus Window *</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div>
+                  <small style="color:var(--text-secondary);">Start Time</small>
+                  <input type="time" class="form-input" id="ob-peakstart" value="10:00" required>
+                </div>
+                <div>
+                  <small style="color:var(--text-secondary);">End Time</small>
+                  <input type="time" class="form-input" id="ob-peakend" value="12:00" required>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+              <label class="toggle">
+                <input type="checkbox" id="ob-smartschedule" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <div>
+                <div style="font-size:0.875rem; font-weight:600;">Enable AI Smart Scheduling</div>
+                <div style="font-size:0.72rem; color:var(--text-muted);">Allow TACTIC to automatically fit tasks into peak focus hours.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Success Animation Screen -->
+        <div class="ob-step-content" id="ob-step-success">
+          <div class="ob-success-loader">
+            <div class="ob-success-ring"></div>
+            <div class="ob-success-text">Profile Authorized</div>
+            <p style="color:var(--text-muted); font-size:0.8rem; text-align:center; max-width:300px;">Optimizing schedule parameters and initializing dashboard...</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Navigation buttons -->
+      <div class="ob-footer-nav" id="ob-footer-nav">
+        <button class="btn btn-ghost" id="ob-prev-btn" onclick="Onboarding.prev()" style="visibility:hidden;">← Back</button>
+        <button class="btn btn-primary" id="ob-next-btn" onclick="Onboarding.next()" style="box-shadow: 0 0 15px rgba(138,43,226,0.3); border-color:var(--neon-purple); background:var(--neon-purple); color:#fff;">Continue →</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Drag & Drop Overlay -->
+  <div id="drag-drop-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,10,14,0.85);backdrop-filter:blur(10px);z-index:9999;flex-direction:column;align-items:center;justify-content:center;color:white;text-align:center;transition:all 0.3s ease;">
+    <div style="font-size:4rem;margin-bottom:20px;">📄</div>
+    <h2>Drop your datesheet here</h2>
+    <p style="color:var(--text-muted);margin-top:10px;">TACTIC will extract exams and auto-schedule them.</p>
+  </div>
+  <input type="file" id="datesheet-upload" accept="image/*,text/*,.csv,.pdf" style="display:none">
+  <!-- Neural Background Canvas -->
+  <canvas id="neural-canvas"></canvas>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- App Shell -->
+  <div id="app">
+    <!-- Demo Badge -->
+    <div id="demo-badge" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(255, 51, 102, 0.9); backdrop-filter:blur(10px); color:#fff; padding:8px 16px; border-radius:20px; font-size:0.8rem; font-weight:600; z-index:9999; box-shadow:0 0 20px rgba(255,51,102,0.4); border:1px solid rgba(255,255,255,0.2);">
+      Demo Mode – Changes are not saved.
+    </div>
+
+    <!-- ══════════ SIDEBAR ══════════ -->
+    <nav class="sidebar" id="sidebar">
+      <!-- Logo -->
+      <div class="sidebar-logo">
+        <div class="logo-orb"><img src="logo.png" alt="Logo"></div>
+        <div class="logo-text">
+          <h3>TACTIC</h3>
+          <small>Productivity Companion</small>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" data-tooltip="Collapse Sidebar"><span class="toggle-icon">‹</span></button>
+      </div>
+
+      <!-- Nav Links -->
+      <div class="sidebar-nav">
+        <div class="nav-section-label">Core</div>
+
+        <div class="nav-item active" data-view="dashboard" data-tooltip="Dashboard" aria-label="Dashboard">
+          <div class="nav-icon">⚡</div>
+          <span class="nav-label">Dashboard</span>
+        </div>
+
+        <div class="nav-item" data-view="tasks" data-tooltip="Tasks" aria-label="Tasks">
+          <div class="nav-icon">✅</div>
+          <span class="nav-label">Tasks</span>
+          <span class="nav-badge" data-type="tasks">0</span>
+        </div>
+
+        <div class="nav-item" data-view="calendar" data-tooltip="Calendar" aria-label="Calendar">
+          <div class="nav-icon">📅</div>
+          <span class="nav-label">Calendar</span>
+        </div>
+
+        <div class="nav-section-label" style="margin-top:8px">Growth</div>
+
+        <div class="nav-item" data-view="habits" data-tooltip="Habits & Goals" aria-label="Habits">
+          <div class="nav-icon">🔥</div>
+          <span class="nav-label">Habits & Goals</span>
+        </div>
+
+        <div class="nav-item" data-view="analytics" data-tooltip="Analytics" aria-label="Analytics">
+          <div class="nav-icon">📊</div>
+          <span class="nav-label">Analytics</span>
+        </div>
+
+        <div class="nav-section-label" style="margin-top:8px">System</div>
+
+        <div class="nav-item" data-view="settings" data-tooltip="Settings" aria-label="Settings">
+          <div class="nav-icon">⚙️</div>
+          <span class="nav-label">Settings</span>
+        </div>
+      </div>
+      <!-- AI Status -->
+      <div class="ai-status-card" id="ai-toggle-btn-sidebar" onclick="AiChat.toggle()">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="ai-status-orb"><img src="logo.png" alt="TACTIC AI"></div>
+          <div class="ai-status-text">
+            <h4>TACTIC</h4>
+            <p>Online · Ready to assist</p>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ══════════ MAIN AREA ══════════ -->
+    <div class="main-area">
+
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="topbar-btn" id="mobile-menu-btn" style="display:none" aria-label="Menu">☰</button>
+          <div id="topbar-title" class="topbar-title">Dashboard</div>
+        </div>
+
+        <div class="topbar-search">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="global-search" placeholder="Search tasks… (Ctrl+K)" autocomplete="off" aria-label="Search tasks">
+        </div>
+
+        <div class="topbar-right">
+          <!-- Pomodoro -->
+          <button class="topbar-btn" id="pomodoro-btn" data-tooltip="Start Pomodoro Timer" data-tooltip-pos="bottom" title="Start Pomodoro" aria-label="Pomodoro timer">🍅</button>
+          <span id="pomodoro-display" style="font-size:0.78rem;font-weight:700;color:var(--neon-cyan);display:none;min-width:40px"></span>
+
+          <!-- Notifications -->
+          <button class="topbar-btn" id="notif-btn" data-tooltip="Notifications" data-tooltip-pos="bottom" aria-label="Notifications">
+            🔔
+            <span class="notif-dot"></span>
+          </button>
+
+          <!-- Sync Status Badge -->
+          <span id="sync-badge" style="font-size:0.68rem;font-weight:700;padding:3px 8px;border-radius:var(--radius-full);background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);color:var(--neon-cyan);display:none">☁ Synced</span>
+
+          <!-- AI Toggle -->
+          <button class="topbar-btn" id="ai-toggle-btn" data-tooltip="Open AI Assistant (Ctrl+/)" data-tooltip-pos="bottom" style="color:var(--neon-purple)" aria-label="Open AI Assistant">✦</button>
+
+          <!-- Sign In / Avatar -->
+          <button id="auth-login-btn" class="btn btn-primary btn-sm" onclick="Auth.signInWithGoogle()" style="display:none" data-tooltip="Connect with your Google account" data-tooltip-pos="bottom">Sign in with Google</button>
+          <div style="position:relative; display:flex; align-items:center; justify-content:center;">
+            <div class="user-avatar" title="User Menu" id="user-avatar-btn" onclick="toggleUserMenu(event)" data-tooltip="User Menu" data-tooltip-pos="bottom" style="cursor:pointer">G</div>
+            <!-- Popover -->
+            <div id="user-menu-popover" style="display:none; position:absolute; top:45px; right:0; width:220px; background:rgba(20,20,25,0.95); backdrop-filter:blur(15px); border:1px solid var(--glass-border); padding:12px; border-radius:12px; z-index:999; box-shadow:0 10px 40px rgba(0,0,0,0.6);">
+              <div id="popover-guest-options">
+                <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:10px; text-align:center;">Currently browsing as Guest</p>
+                <button class="btn btn-primary btn-sm w-full" style="margin-bottom:8px; box-shadow: 0 0 10px rgba(168,85,247,0.3);" onclick="Auth.signInWithGoogle(); toggleUserMenu()">☁️ Sign in with Google</button>
+                <button class="btn btn-ghost btn-sm w-full" onclick="toggleUserMenu()" style="border: 1px solid rgba(255,255,255,0.1);">Continue as Guest</button>
+              </div>
+              <div id="popover-user-options" style="display:none;">
+                <p id="popover-user-name" style="font-size:0.85rem; font-weight:600; margin-bottom:10px; text-align:center; color:var(--neon-purple);"></p>
+                <button class="btn btn-ghost btn-sm w-full" onclick="Auth.signOut(); toggleUserMenu()" style="color:var(--text-muted);">Sign Out</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <main class="content-area" id="content-area">
+
+        <!-- ════════ DASHBOARD VIEW ════════ -->
+        <section class="view active" id="dashboard-view">
+          <!-- Smart AI Coach Banner -->
+          <div class="ai-insight anim-glow-border">
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div class="ai-insight-icon" style="color:var(--neon-green)">✦</div>
+                <div>
+                  <h4 style="font-size:1rem; font-weight:800; font-family:'Orbitron',sans-serif; text-transform:uppercase; color:var(--neon-green)">Smart AI Coach</h4>
+                  <p style="font-size:0.75rem; color:var(--text-muted); margin: 0;">Proactive recommendations based on your routine and workload</p>
+                </div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="AiChat.open()" data-tooltip="Chat with TACTIC">Ask AI →</button>
+            </div>
+            
+            <!-- Dynamic 3 Cards Grid -->
+            <div id="ai-recommendation-grid"></div>
+          </div>
+
+          <!-- Today's Plan Section -->
+          <div id="todays-plan-section" style="display:none; margin-bottom: 24px;" class="glass-card">
+            <div class="section-header" style="padding: 24px 24px 0 24px;">
+              <span class="section-title text-glow-cyan">Today's Plan</span>
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('todays-plan-section').style.display='none'">Close</button>
+            </div>
+            <div id="todays-plan-content" style="padding: 24px; display:flex; flex-direction:column; gap:12px;"></div>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="stats-grid stagger-children">
+            <div class="stat-card cyan hover-lift anim-slide-up" style="cursor: pointer;" onclick="App.showView('tasks'); TasksView.setFilter('all')">
+              <div class="stat-icon">📋</div>
+              <div class="stat-value" id="dash-total">—</div>
+              <div class="stat-label">Total Tasks</div>
+            </div>
+            <div class="stat-card green hover-lift anim-slide-up" style="cursor: pointer;" onclick="App.showView('tasks'); TasksView.setFilter('completed')">
+              <div class="stat-icon">✅</div>
+              <div class="stat-value" id="dash-completed">—</div>
+              <div class="stat-label">Completed</div>
+              <div class="stat-trend up" id="dash-completed-trend"></div>
+            </div>
+            <div class="stat-card amber hover-lift anim-slide-up" style="cursor: pointer;" onclick="App.showView('tasks'); TasksView.setFilter('today')">
+              <div class="stat-icon">📅</div>
+              <div class="stat-value" id="dash-today">—</div>
+              <div class="stat-label">Due Today</div>
+            </div>
+            <div class="stat-card purple hover-lift anim-slide-up" style="cursor: pointer;" onclick="App.showView('tasks'); TasksView.setFilter('overdue')">
+              <div class="stat-icon">🚨</div>
+              <div class="stat-value" id="dash-overdue">—</div>
+              <div class="stat-label">Overdue</div>
+            </div>
+          </div>
+
+          <!-- Main Dashboard Grid -->
+          <div style="display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start" id="dash-grid">
+
+            <!-- Today's Tasks -->
+            <div class="glass-card" style="padding:24px">
+              <div class="section-header" style="margin-bottom:20px">
+                <span class="section-title">Today's Priority Tasks</span>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button class="btn btn-primary btn-sm" onclick="Dashboard.planDay()" data-tooltip="Generate schedule based on your routine">PLAN MY DAY 🧠</button>
+                  <button class="btn btn-primary btn-sm" onclick="document.getElementById('datesheet-upload').click()" data-tooltip="Upload Image/Text/CSV">UPLOAD DATESHEET 📄</button>
+                  <button class="btn btn-primary btn-sm" onclick="TaskModal.open()" id="add-task-btn-dash" data-tooltip="Create a new task">+ Add Task</button>
+                </div>
+              </div>
+              <div id="dash-today-tasks"></div>
+            </div>
+
+            <!-- Right Column -->
+            <div style="display:flex;flex-direction:column;gap:20px">
+              <!-- Progress Ring -->
+              <div class="glass-card" style="padding:24px;text-align:center">
+                <div class="section-title" style="margin-bottom:16px">Completion Rate</div>
+                <div style="display:flex;justify-content:center;margin-bottom:12px">
+                  <canvas id="dash-ring"></canvas>
+                </div>
+                <p style="font-size:0.78rem">Tasks done this session</p>
+              </div>
+
+              <!-- Weekly Sparkline -->
+              <div class="glass-card" style="padding:20px">
+                <div class="section-title" style="margin-bottom:12px">This Week</div>
+                <canvas id="dash-chart" style="width:100%"></canvas>
+                <div style="display:flex;gap:12px;margin-top:8px;font-size:0.68rem;color:var(--text-muted)">
+                  <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:#00d4ff;display:inline-block"></span>Done</span>
+                  <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:#a855f7;display:inline-block"></span>Due</span>
+                </div>
+              </div>
+
+              <!-- Quick Actions -->
+              <div class="glass-card" style="padding:20px">
+                <div class="section-title" style="margin-bottom:12px">Quick Actions</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <button class="btn btn-ghost w-full" style="justify-content:flex-start;gap:10px" onclick="TaskModal.open()">➕ New Task</button>
+                  <button class="btn btn-ghost w-full" style="justify-content:flex-start;gap:10px" onclick="App.showView('calendar')">📅 Calendar</button>
+                  <button class="btn btn-ghost w-full" style="justify-content:flex-start;gap:10px" onclick="AiChat.open();AiChat.respond('What should I focus on right now?')">🧠 AI Focus Mode</button>
+                  <button class="btn btn-ghost w-full" style="justify-content:flex-start;gap:10px" onclick="$('pomodoro-btn').click()">🍅 Start Pomodoro</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ TASKS VIEW ════════ -->
+        <section class="view" id="tasks-view">
+          <div class="page-header">
+            <div class="meta">
+              <h2>Task Manager</h2>
+              <p id="tasks-count">0 tasks</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all">All</button>
+                <button class="filter-tab" data-filter="today">Today</button>
+                <button class="filter-tab" data-filter="tomorrow">Tomorrow</button>
+                <button class="filter-tab" data-filter="week">This Week</button>
+                <button class="filter-tab" data-filter="overdue">Overdue</button>
+                <button class="filter-tab" data-filter="completed">Completed</button>
+              </div>
+              <button class="btn btn-primary" id="add-task-btn" aria-label="Add new task" data-tooltip="Create a new task">+ New Task</button>
+            </div>
+          </div>
+
+          <!-- Category quick-filter -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+            <button class="btn btn-ghost btn-sm" onclick="TasksView.currentList='all';TasksView.render()">All Lists</button>
+            <button class="btn btn-ghost btn-sm" style="color:#a855f7" onclick="TasksView.currentList='work';TasksView.render()">💼 Work</button>
+            <button class="btn btn-ghost btn-sm" style="color:#00ff88" onclick="TasksView.currentList='personal';TasksView.render()">🌱 Personal</button>
+            <button class="btn btn-ghost btn-sm" style="color:#ffb800" onclick="TasksView.currentList='shopping';TasksView.render()">🛍 Shopping</button>
+            <button class="btn btn-ghost btn-sm" style="color:#ff3366" onclick="TasksView.currentList='health';TasksView.render()">💊 Health</button>
+          </div>
+
+          <div id="tasks-list" style="display:flex;flex-direction:column;gap:8px"></div>
+        </section>
+
+        <!-- ════════ CALENDAR VIEW ════════ -->
+        <section class="view" id="calendar-view">
+          <div class="page-header">
+            <div class="meta">
+              <h2>Calendar</h2>
+              <p>Click any day to add a task on that date</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <button class="btn btn-ghost" id="cal-prev" aria-label="Previous month" data-tooltip="Previous Month">‹ Prev</button>
+              <span id="cal-month-title" style="font-weight:700;min-width:180px;text-align:center"></span>
+              <button class="btn btn-ghost" id="cal-next" aria-label="Next month" data-tooltip="Next Month">Next ›</button>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 280px; gap:24px; align-items:start;">
+            <div id="calendar-grid-container"></div>
+            
+            <!-- Upcoming Ops Sidebar -->
+            <div class="calendar-sidebar" style="border-left: 2px solid var(--neon-green); padding-left: 16px; margin-top: 40px;">
+              <div class="section-title" style="margin-bottom: 24px; color: var(--neon-green); font-family: 'Orbitron', sans-serif; letter-spacing: 0.1em; font-size: 0.9rem;">UPCOMING_OPS</div>
+              <div id="calendar-upcoming-ops" style="display: flex; flex-direction: column; gap: 16px;">
+                <!-- Tasks will be injected here -->
+              </div>
+              <button class="btn btn-ghost w-full" style="margin-top: 24px; font-size: 0.65rem; letter-spacing: 0.05em; border: 1px solid rgba(255,255,255,0.1);" onclick="App.showView('tasks'); TasksView.setFilter('all')">VIEW ALL OPERATIONS</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ HABITS & GOALS VIEW ════════ -->
+        <section class="view" id="habits-view">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start" id="habits-grid">
+            <!-- Habits -->
+            <div>
+              <div class="page-header" style="margin-bottom:16px">
+                <div class="meta"><h2>Daily Habits</h2><p>Build consistency, one day at a time</p></div>
+                <button class="btn btn-primary btn-sm" id="add-habit-btn" data-tooltip="Add a new daily habit">+ Habit</button>
+              </div>
+              <!-- Streak highlight -->
+              <div class="glass-card" style="padding:20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(255,140,0,0.08),rgba(255,51,102,0.08));border-color:rgba(255,140,0,0.2)">
+                <div class="streak-flame">🔥</div>
+                <div>
+                  <div style="font-size:1.4rem;font-weight:800;color:var(--neon-amber)" id="top-streak">7</div>
+                  <div style="font-size:0.78rem;color:var(--text-muted)">Best current streak</div>
+                </div>
+                <div style="margin-left:auto;text-align:right">
+                  <div style="font-size:0.85rem;font-weight:600;color:var(--neon-green)" id="habits-done-today">0 done</div>
+                  <div style="font-size:0.7rem;color:var(--text-muted)">today</div>
+                </div>
+              </div>
+              <div id="habits-list"></div>
+            </div>
+
+            <!-- Goals -->
+            <div>
+              <div class="page-header" style="margin-bottom:16px">
+                <div class="meta"><h2>Goals</h2><p>Long-term milestones & progress</p></div>
+                <button class="btn btn-primary btn-sm" id="add-goal-btn" data-tooltip="Add a new goal">+ Goal</button>
+              </div>
+              <div id="goals-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ ANALYTICS VIEW ════════ -->
+        <section class="view" id="analytics-view">
+          <div class="page-header">
+            <div class="meta"><h2>Analytics</h2><p>AI-powered insights on your productivity patterns</p></div>
+          </div>
+
+          <div class="stats-grid" style="margin-bottom:24px">
+            <div class="stat-card cyan"><div class="stat-icon">📋</div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total Tasks</div></div>
+            <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value" id="stat-completed">—</div><div class="stat-label">Completed</div></div>
+            <div class="stat-card amber"><div class="stat-icon">📅</div><div class="stat-value" id="stat-today">—</div><div class="stat-label">Due Today</div></div>
+            <div class="stat-card purple"><div class="stat-icon">🚨</div><div class="stat-value" id="stat-overdue">—</div><div class="stat-label">Overdue</div></div>
+            <div class="stat-card cyan"><div class="stat-icon">📈</div><div class="stat-value" id="stat-rate">—</div><div class="stat-label">Completion Rate</div></div>
+            <div class="stat-card amber"><div class="stat-icon">🔥</div><div class="stat-value" id="stat-streak">—</div><div class="stat-label">Day Streak</div></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-bottom:24px">
+            <!-- Weekly bar chart -->
+            <div class="glass-card" style="padding:24px">
+              <div class="section-title" style="margin-bottom:16px">Weekly Activity (Done vs Due)</div>
+              <canvas id="weekly-bar-chart" style="width:100%"></canvas>
+              <div style="display:flex;gap:16px;margin-top:12px;font-size:0.7rem;color:var(--text-muted)">
+                <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#00d4ff;display:inline-block"></span>Completed</span>
+                <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#a855f7;display:inline-block"></span>Total Due</span>
+              </div>
+            </div>
+
+            <!-- Priority donut + ring -->
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div class="glass-card" style="padding:24px;text-align:center">
+                <div class="section-title" style="margin-bottom:12px">Completion Rate</div>
+                <div style="display:flex;justify-content:center"><canvas id="completion-ring"></canvas></div>
+              </div>
+
+              <div class="glass-card" style="padding:24px;text-align:center">
+                <div class="section-title" style="margin-bottom:12px">Priority Mix</div>
+                <div style="display:flex;justify-content:center;margin-bottom:12px"><canvas id="priority-donut"></canvas></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:left">
+                  <span style="font-size:0.68rem;color:#ff3366">● Critical</span>
+                  <span style="font-size:0.68rem;color:#ff8c00">● High</span>
+                  <span style="font-size:0.68rem;color:#3b82f6">● Medium</span>
+                  <span style="font-size:0.68rem;color:#6b7280">● Low</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI weekly report -->
+          <div class="ai-insight" style="margin-top:0">
+            <div class="ai-insight-icon">🧠</div>
+            <div>
+              <h4>AI Weekly Report</h4>
+              <p>You're most productive on weekday mornings. Your completion rate has improved by 12% this week. 3 critical tasks are approaching deadlines — consider scheduling focused work sessions today and tomorrow.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ SETTINGS VIEW ════════ -->
+        <section class="view" id="settings-view">
+          <div class="page-header">
+            <div class="meta"><h2>Settings</h2><p>Customize your TACTIC experience</p></div>
+          </div>
+
+          <div style="display:flex; gap:24px; max-width:900px; align-items:flex-start; flex-wrap:wrap;">
+            
+            <!-- Left Column -->
+            <div style="display:flex; flex-direction:column; gap:24px; flex:1; min-width:300px;">
+              <!-- General -->
+              <div class="glass-card" style="padding:24px">
+                <h3 style="margin-bottom:20px;font-size:0.95rem;color:var(--neon-cyan)">⚙️ General</h3>
+                <div style="display:flex;flex-direction:column;gap:18px">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div><div style="font-size:0.875rem;font-weight:600">Notifications</div><div style="font-size:0.72rem;color:var(--text-muted)">Deadline reminders</div></div>
+                    <label class="toggle"><input type="checkbox" id="notif-toggle" checked><span class="toggle-slider"></span></label>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div><div style="font-size:0.875rem;font-weight:600">Voice Assistant</div><div style="font-size:0.72rem;color:var(--text-muted)">Speech input & TTS</div></div>
+                    <label class="toggle"><input type="checkbox" id="voice-toggle" checked><span class="toggle-slider"></span></label>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">AI Personality</label>
+                    <select class="form-select" id="ai-personality">
+                      <option value="coach">Strict Coach 💪</option>
+                      <option value="buddy">Friendly Buddy 😊</option>
+                      <option value="minimal">Minimal (Quiet)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Shortcuts -->
+              <div class="glass-card" style="padding:24px">
+                <h3 style="margin-bottom:16px;font-size:0.95rem;color:var(--neon-green)">⌨️ Keyboard Shortcuts</h3>
+                <div style="display:flex;flex-direction:column;gap:10px;font-size:0.82rem">
+                  <div style="display:flex;justify-content:space-between"><span>New Task</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Alt+N</kbd></div>
+                  <div style="display:flex;justify-content:space-between"><span>Search</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Ctrl+K</kbd></div>
+                  <div style="display:flex;justify-content:space-between"><span>Toggle AI</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Ctrl+/</kbd></div>
+                  <div style="display:flex;justify-content:space-between"><span>Close Modal</span><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;font-family:monospace">Esc</kbd></div>
+                </div>
+              </div>
+
+              <!-- Google Calendar -->
+              <div class="glass-card" style="padding:24px;border-color:rgba(66,133,244,0.2)">
+                <h3 style="margin-bottom:16px;font-size:0.95rem;color:#4285f4">📅 Google Calendar</h3>
+                <p style="font-size:0.78rem;margin-bottom:14px">Sync tasks to your real Google Calendar. Tasks appear as events with smart reminders.</p>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <button class="btn btn-ghost w-full" id="gcal-connect-btn" onclick="GCal.signIn()" data-tooltip="Link your Google Calendar">📅 Connect Google Calendar</button>
+                  <button class="btn btn-ghost w-full" onclick="GCal.syncAllTasks(Tasks.getAll())">🔄 Sync All Tasks Now</button>
+                  <button class="btn btn-ghost btn-sm" onclick="GCal.signOut()" style="color:var(--text-muted)">Disconnect Calendar</button>
+                </div>
+                <span id="gcal-status-badge" style="display:none;font-size:0.72rem;color:var(--neon-green);margin-top:8px"></span>
+              </div>
+
+              <!-- Data -->
+              <div class="glass-card" style="padding:24px">
+                <h3 style="margin-bottom:16px;font-size:0.95rem;color:var(--neon-amber)">💾 Data</h3>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <button class="btn btn-danger w-full" id="clear-btn" data-tooltip="Delete all tasks, habits, and goals">🗑 Clear All Data</button>
+                </div>
+              </div>
+            </div> <!-- End Left Column -->
+
+            <!-- Right Column -->
+            <div style="display:flex; flex-direction:column; gap:24px; flex:1; min-width:300px;">
+              <!-- Notifications -->
+              <div class="glass-card" style="padding:24px">
+                <h3 style="margin-bottom:20px;font-size:0.95rem;color:var(--neon-purple)">🔔 Notifications</h3>
+                <div style="display:flex;flex-direction:column;gap:18px">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div><div style="font-size:0.875rem;font-weight:600">Morning Briefing</div><div style="font-size:0.72rem;color:var(--text-muted)">Daily summary at 9:00 AM</div></div>
+                    <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div><div style="font-size:0.875rem;font-weight:600">1-Hour Warning</div><div style="font-size:0.72rem;color:var(--text-muted)">Alert before deadline</div></div>
+                    <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div><div style="font-size:0.875rem;font-weight:600">AI Nudges</div><div style="font-size:0.72rem;color:var(--text-muted)">Proactive suggestions</div></div>
+                    <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Account -->
+              <div class="glass-card" style="padding:24px;border-color:rgba(168,85,247,0.2)">
+                <h3 style="margin-bottom:16px;font-size:0.95rem;color:var(--neon-purple)">👤 Account & Cloud Sync</h3>
+                <p style="font-size:0.78rem;margin-bottom:4px;color:var(--text-secondary)">Signed in as:</p>
+                <p id="auth-user-name" style="font-size:0.875rem;font-weight:600;margin-bottom:14px">Guest (offline mode)</p>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <button class="btn btn-primary btn-sm" id="auth-login-btn-settings" onclick="Auth.signInWithGoogle()">Sign in with Google ☁</button>
+                  <button class="btn btn-ghost btn-sm" id="auth-logout-btn" onclick="Auth.signOut()" style="display:none">Sign out</button>
+                </div>
+                <p style="font-size:0.7rem;color:var(--text-muted);margin-top:10px">Signing in syncs all your data to Firebase Firestore and enables Google Calendar integration.</p>
+              </div>
+
+              <!-- Daily Routine -->
+              <div class="glass-card" style="padding:24px;border-color:rgba(255, 165, 0, 0.2)">
+                <h3 style="margin-bottom:6px;font-size:0.95rem;color:#ffa500">🌅 Daily Routine</h3>
+                <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:16px;">Edit your default daily routine here to customize your schedules.</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                  <div class="form-group"><label class="form-label">Wake Up</label><input type="time" class="form-input" id="routine-wakeup"></div>
+                  <div class="form-group"><label class="form-label">Sleep</label><input type="time" class="form-input" id="routine-sleep"></div>
+                  
+                  <div class="form-group"><label class="form-label">College Start</label><input type="time" class="form-input" id="routine-collegestart"></div>
+                  <div class="form-group"><label class="form-label">College End</label><input type="time" class="form-input" id="routine-collegeend"></div>
+                  
+                  <div class="form-group"><label class="form-label">Commute (mins)</label><input type="number" class="form-input" id="routine-travel" min="0" max="300"></div>
+                  <div class="form-group"><label class="form-label">Gym Time</label><input type="time" class="form-input" id="routine-gym"></div>
+                  
+                  <div class="form-group"><label class="form-label">Lunch</label><input type="time" class="form-input" id="routine-lunch"></div>
+                  <div class="form-group"><label class="form-label">Dinner</label><input type="time" class="form-input" id="routine-dinner"></div>
+                  
+                  <div class="form-group"><label class="form-label">Study (mins)</label><input type="number" class="form-input" id="routine-studydur" min="0" max="1000"></div>
+                  <div class="form-group"><label class="form-label">Pomodoro</label><input type="number" class="form-input" id="routine-pomodoro" min="5" max="120"></div>
+
+                  <div class="form-group"><label class="form-label">Peak Start</label><input type="time" class="form-input" id="routine-peakstart"></div>
+                  <div class="form-group"><label class="form-label">Peak End</label><input type="time" class="form-input" id="routine-peakend"></div>
+                </div>
+              </div>
+            </div> <!-- End Right Column -->
+          </div>
+
+          <div style="margin-top:24px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;gap:12px">
+              <button class="btn btn-primary" id="settings-save-btn" data-tooltip="Save your preferences">Save Settings</button>
+            </div>
+          </div>
+        </section>
+
+      </main><!-- /content-area -->
+    </div><!-- /main-area -->
+
+    <!-- ══════════ AI PANEL ══════════ -->
+    <aside class="ai-panel" id="ai-panel">
+      <div class="ai-panel-header">
+        <div class="ai-orb-large"><img src="logo.png" alt="TACTIC AI"></div>
+        <div class="ai-panel-info">
+          <h4>TACTIC</h4>
+          <p>Your intelligent assistant</p>
+        </div>
+        <button class="ai-panel-close" id="ai-panel-close" aria-label="Close AI panel" data-tooltip="Close AI Panel">✕</button>
+      </div>
+
+      <!-- Messages -->
+      <div class="ai-messages" id="ai-messages"></div>
+
+      <!-- Quick Actions -->
+      <div class="ai-quick-actions">
+        <button class="ai-quick-btn" onclick="AiChat.respond('Can I finish today?')">Can I finish today?</button>
+        <button class="ai-quick-btn" onclick="AiChat.respond('What should I do next?')">What should I do next?</button>
+        <button class="ai-quick-btn" onclick="AiChat.respond('How much free time do I have?')">How much free time do I have?</button>
+        <button class="ai-quick-btn" onclick="AiChat.respond('When should I study?')">When should I study?</button>
+        <button class="ai-quick-btn" onclick="AiChat.respond('Should I postpone anything?')">Should I postpone anything?</button>
+        <button class="ai-quick-btn" onclick="AiChat.respond('How am I doing today?')">How am I doing today?</button>
+      </div>
+
+      <!-- Input -->
+      <div class="ai-input-area" style="position:relative;">
+        <div class="ai-input-row">
+          <textarea id="ai-chat-input" placeholder="Ask TACTIC anything… or say 'add task'" rows="1" aria-label="AI chat input"></textarea>
+          <button class="ai-voice-btn" id="voice-btn" aria-label="Voice input" data-tooltip="Voice Input">🎙</button>
+          <button class="ai-send-btn" id="ai-send-btn" aria-label="Send message" data-tooltip="Send Message">↑</button>
+        </div>
+        <div style="text-align:center;font-size:0.65rem;color:var(--text-muted);margin-top:6px">Try: "Add meeting tomorrow at 3pm" or "What should I focus on?"</div>
+      </div>
+    </aside>
+
+  </div><!-- /app -->
+
+  <!-- ══════════ MOBILE NAV ══════════ -->
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
+    <button class="mobile-nav-btn active" data-view="dashboard" aria-label="Dashboard"><span class="icon">⚡</span><span>Home</span></button>
+    <button class="mobile-nav-btn" data-view="tasks" aria-label="Tasks"><span class="icon">✅</span><span>Tasks</span></button>
+    <button class="mobile-nav-btn" data-view="calendar" aria-label="Calendar"><span class="icon">📅</span><span>Calendar</span></button>
+    <button class="mobile-nav-btn" data-view="habits" aria-label="Habits"><span class="icon">🔥</span><span>Habits</span></button>
+    <button class="mobile-nav-btn" data-view="analytics" aria-label="Analytics"><span class="icon">📊</span><span>Stats</span></button>
+  </nav>
+
+  <!-- Mobile FAB -->
+  <button class="mobile-fab" id="mobile-fab" aria-label="Add task" data-tooltip="Add New Task">+</button>
+
+  <!-- Desktop FAB -->
+  <button class="fab-add" onclick="TaskModal.open()" data-tooltip="New Task (Ctrl+N)" aria-label="Add new task">+</button>
+
+  <!-- ══════════ TASK MODAL ══════════ -->
+  <div class="modal-overlay" id="task-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
+    <div class="modal" id="task-modal">
+      <div class="modal-header">
+        <h3 id="task-modal-title">New Task</h3>
+        <button class="modal-close" id="modal-close-btn" aria-label="Close modal" data-tooltip="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Title -->
+        <div class="form-group">
+          <label class="form-label" for="task-title-input">Task Title *</label>
+          <input type="text" id="task-title-input" class="form-input" placeholder="What needs to be done?" autocomplete="off">
+        </div>
+
+        <!-- Description -->
+        <div class="form-group">
+          <label class="form-label" for="task-desc-input">Description</label>
+          <textarea id="task-desc-input" class="form-textarea" placeholder="Add details, notes, or context…"></textarea>
+        </div>
+
+        <!-- Priority -->
+        <div class="form-group">
+          <label class="form-label">Priority (AI will auto-score)</label>
+          <div class="priority-selector">
+            <div class="priority-opt" data-val="critical">🔴 Critical</div>
+            <div class="priority-opt" data-val="high">🟠 High</div>
+            <div class="priority-opt selected" data-val="medium">🔵 Medium</div>
+            <div class="priority-opt" data-val="low">⚪ Low</div>
+          </div>
+        </div>
+
+        <!-- Date & Duration -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="task-date-input">Due Date & Time</label>
+            <input type="datetime-local" id="task-date-input" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="task-duration-input">Estimated (mins)</label>
+            <input type="number" id="task-duration-input" class="form-input" value="30" min="5" max="480">
+          </div>
+        </div>
+
+        <!-- Category & Repeat -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="task-category-input">Category</label>
+            <select id="task-category-input" class="form-select">
+              <option value="work">💼 Work</option>
+              <option value="personal">🌱 Personal</option>
+              <option value="shopping">🛍 Shopping</option>
+              <option value="health">💊 Health</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="task-repeat-input">Repeat</label>
+            <select id="task-repeat-input" class="form-select">
+              <option value="">No repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- AI hint -->
+        <div style="padding:10px 14px;border-radius:10px;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);font-size:0.75rem;color:var(--text-muted)">
+          ✦ <strong style="color:var(--neon-purple)">TACTIC</strong> will auto-score priority based on keywords, deadline urgency, and category weights.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="modal-close-btn-2" onclick="TaskModal.close()">Cancel</button>
+        <button class="btn btn-primary" id="modal-save-btn" data-tooltip="Save this task">Save Task ✦</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ AI ADVICE MODAL ══════════ -->
+  <div class="modal-overlay" id="advice-modal-overlay" style="z-index: 10000;">
+    <div class="modal" id="advice-modal" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>AI Instructions</h3>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">Optional: Any specific advice for the AI? (e.g. 'Only extract Computer Science exams')</p>
+        <input type="text" id="advice-input" class="form-input" placeholder="Type instructions here or skip..." autocomplete="off">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="advice-skip-btn">Skip</button>
+        <button class="btn btn-primary" id="advice-submit-btn">Analyze ✦</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SCRIPTS ══════════ -->
+  <!-- Config & new modules (load before app.js) -->
+  <script src="js/demo.js"></script>
+  <script src="env.js?v=2"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/parser.js?v=2"></script>
+  <script src="js/tasks.js?v=2"></script>
+  <script src="js/ai.js?v=2"></script>
+  <script src="js/habits.js?v=2"></script>
+  <script src="js/analytics.js?v=2"></script>
+  <script src="js/voice.js?v=3"></script>
+  <script src="js/notifications.js?v=3"></script>
+  <script src="js/auth.js?v=3"></script>
+  <script src="js/db.js?v=3"></script>
+  <script src="js/scheduleService.js?v=3"></script>
+  <script src="js/gcal.js?v=3"></script>
+  <script src="js/onboarding.js?v=3"></script>
+  <script src="js/aiPlanner.js?v=1"></script>
+  <script src="js/aiRecommendationService.js?v=1"></script>
+  <script src="js/aiContextService.js?v=1"></script>
+  <script src="js/aiChatService.js?v=1"></script>
+  <script src="js/tacticModal.js"></script>
+  <script src="js/app.js?v=3"></script>
+  <script async defer src="https://apis.google.com/js/api.js" onload="GCal.init()"></script>
+
+  <!-- Responsive sidebar fix -->
+  <script>
+    function toggleUserMenu(e) {
+      if (e) e.stopPropagation();
+      const popover = document.getElementById('user-menu-popover');
+      if (popover.style.display === 'none') {
+        popover.style.display = 'block';
+        // Update UI state inside popover
+        const user = Auth.getUser();
+        if (user && !user.isGuest) {
+          document.getElementById('popover-guest-options').style.display = 'none';
+          document.getElementById('popover-user-options').style.display = 'block';
+          document.getElementById('popover-user-name').textContent = user.displayName || user.email;
+        } else {
+          document.getElementById('popover-guest-options').style.display = 'block';
+          document.getElementById('popover-user-options').style.display = 'none';
+        }
+      } else {
+        popover.style.display = 'none';
+      }
+    }
+
+    // Close popover when clicking outside
+    document.addEventListener('click', (e) => {
+      const popover = document.getElementById('user-menu-popover');
+      if (popover && popover.style.display === 'block' && !e.target.closest('#user-avatar-btn') && !e.target.closest('#user-menu-popover')) {
+        popover.style.display = 'none';
+      }
+    });
+
+    // Show mobile menu btn on small screens
+    function checkMobile() {
+      const btn = document.getElementById('mobile-menu-btn');
+      if (btn) btn.style.display = window.innerWidth <= 768 ? 'flex' : 'none';
+    }
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    // Close sidebar on mobile when clicking outside
+    document.addEventListener('click', (e) => {
+      const sidebar = document.getElementById('sidebar');
+      const menuBtn = document.getElementById('mobile-menu-btn');
+      if (window.innerWidth <= 768 && sidebar?.classList.contains('mobile-open')) {
+        if (!sidebar.contains(e.target) && e.target !== menuBtn) {
+          sidebar.classList.remove('mobile-open');
+        }
+      }
+    });
+  </script>
+</body>
+</html>

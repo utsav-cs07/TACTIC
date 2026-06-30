@@ -109,15 +109,53 @@ const UI = {
     $qa('.filter-tab[data-filter]').forEach(el => el.classList.remove('active'));
   },
 
+  getGreeting(name) {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return `Good Morning, ${name} ☀️`;
+    if (hour >= 12 && hour < 17) return `Good Afternoon, ${name} 🌤`;
+    if (hour >= 17 && hour < 21) return `Good Evening, ${name} 🌇`;
+    return `Good Night, ${name} 🌙`;
+  },
+
   showView(viewId) {
+    App.currentView = viewId;
     $qa('.view').forEach(v => v.classList.remove('active'));
     const view = $(viewId + '-view');
     if (view) view.classList.add('active');
     this.setActiveNav(viewId);
+    
     const title = { dashboard: 'Dashboard', tasks: 'Tasks', calendar: 'Calendar', habits: 'Habits & Goals', analytics: 'Analytics', settings: 'Settings' };
     const topTitle = $('topbar-title');
-    if (topTitle) topTitle.textContent = title[viewId] || viewId;
-    App.currentView = viewId;
+    
+    if (topTitle) {
+      if (viewId === 'dashboard') {
+        const updateGreeting = (profile) => {
+          if (App.currentView !== 'dashboard') return;
+          if (profile && profile.fullName) {
+            topTitle.textContent = this.getGreeting(profile.fullName.split(' ')[0]);
+          } else {
+            topTitle.textContent = 'Welcome Back 👋';
+          }
+        };
+
+        const cached = typeof DB !== 'undefined' && DB.getCachedProfile ? DB.getCachedProfile() : null;
+        if (cached) {
+          updateGreeting(cached);
+        } else {
+          topTitle.innerHTML = '<span style="opacity:0.5;">Loading...</span>';
+          if (typeof DB !== 'undefined' && DB.getUserProfile) {
+            DB.getUserProfile().then(p => updateGreeting(p)).catch(() => {
+              if (App.currentView === 'dashboard') topTitle.textContent = 'Welcome Back 👋';
+            });
+          } else {
+            topTitle.textContent = 'Welcome Back 👋';
+          }
+        }
+      } else {
+        topTitle.textContent = title[viewId] || viewId;
+      }
+    }
+    
     App.renderCurrentView();
   },
 };
@@ -126,19 +164,19 @@ const UI = {
 const TaskModal = {
   editing: null,
 
-  open(task = null) {
+  open(task = null, prefill = {}) {
     this.editing = task;
     const modal = $('task-modal');
     const overlay = $('task-modal-overlay');
     if (!modal || !overlay) return;
 
     // Reset form
-    $('task-title-input').value        = task?.title || '';
-    $('task-desc-input').value         = task?.desc  || '';
-    $('task-category-input').value     = task?.category || 'work';
-    $('task-date-input').value         = task?.dueDate ? new Date(task.dueDate).toISOString().slice(0,16) : '';
-    $('task-duration-input').value     = task?.estimatedMins || 30;
-    $('task-repeat-input').value       = task?.repeat || '';
+    $('task-title-input').value        = task?.title || prefill.title || '';
+    $('task-desc-input').value         = task?.desc  || prefill.desc || '';
+    $('task-category-input').value     = task?.category || prefill.category || 'work';
+    $('task-date-input').value         = task?.dueDate ? new Date(task.dueDate).toISOString().slice(0,16) : (prefill.dueDate || '');
+    $('task-duration-input').value     = task?.estimatedMins || prefill.estimatedMins || 30;
+    $('task-repeat-input').value       = task?.repeat || prefill.repeat || '';
     $q('#task-modal h3').textContent   = task ? 'Edit Task' : 'New Task';
 
     // Priority selector
@@ -188,7 +226,10 @@ const TaskModal = {
       // Sync to Google Calendar (only if has due date)
       if (task.dueDate && GCal.isConnected()) {
         const eventId = await GCal.addEvent(task);
-        if (eventId) Tasks.update(task.id, { gcalEventId: eventId });
+        if (eventId) {
+          Tasks.update(task.id, { gcalEventId: eventId });
+          DB.updateTask(task.id, { gcalEventId: eventId });
+        }
       }
       showToast('Task added! AI scored & prioritized 🧠', 'success');
     }
@@ -227,7 +268,7 @@ const AiChat = {
 
     const msg = document.createElement('div');
     msg.className = `chat-msg ${role}`;
-    const initials = role === 'ai' ? '✦' : 'U';
+    const initials = role === 'ai' ? '<img src="logo.png" alt="AI">' : 'U';
     msg.innerHTML = `
       <div class="chat-avatar">${initials}</div>
       <div class="chat-bubble">${text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>
@@ -242,12 +283,49 @@ const AiChat = {
     const el = document.createElement('div');
     el.className = 'chat-msg ai';
     el.id = 'typing-indicator';
-    el.innerHTML = `<div class="chat-avatar">✦</div><div class="chat-bubble chat-typing"><span></span><span></span><span></span></div>`;
+    el.innerHTML = `<div class="chat-avatar"><img src="logo.png" alt="AI"></div><div class="chat-bubble chat-typing"><span></span><span></span><span></span></div>`;
     container.appendChild(el);
     container.scrollTop = container.scrollHeight;
   },
 
   removeTyping() { const el = $('typing-indicator'); if (el) el.remove(); },
+
+  addStructuredMessage(role, data) {
+    const container = $('ai-messages');
+    if (!container) return;
+
+    const msg = document.createElement('div');
+    msg.className = `chat-msg ${role}`;
+    const initials = role === 'ai' ? '<img src="logo.png" alt="AI">' : 'U';
+    
+    msg.innerHTML = `
+      <div class="chat-avatar">${initials}</div>
+      <div class="chat-bubble" style="padding: 0; background: transparent; border: none; box-shadow: none;">
+        <div class="ai-resp-container">
+          <div class="ai-resp-section">
+            <span class="ai-resp-label answer">Answer</span>
+            <span class="ai-resp-text">${data.answer}</span>
+          </div>
+          ${data.reasoning ? `
+          <div class="ai-resp-section">
+            <span class="ai-resp-label reason">Reasoning</span>
+            <span class="ai-resp-text">${data.reasoning}</span>
+          </div>` : ''}
+          ${data.action ? `
+          <div class="ai-resp-section">
+            <span class="ai-resp-label action">Recommendation</span>
+            <span class="ai-resp-text">${data.action}</span>
+          </div>` : ''}
+          ${data.confidence ? `
+          <div class="ai-resp-confidence">Confidence: ${data.confidence}%</div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+    
+    container.appendChild(msg);
+    container.scrollTop = container.scrollHeight;
+  },
 
   async respond(input) {
     this.addMessage('user', input);
@@ -255,22 +333,24 @@ const AiChat = {
 
     await new Promise(r => setTimeout(r, 600 + Math.random() * 600));
 
-    const result = await AI.processInput(input, Tasks.getAll());
-    this.removeTyping();
-    this.addMessage('ai', result.text);
+    if (typeof AIContextService !== 'undefined' && typeof AIChatService !== 'undefined') {
+      const context = AIContextService.buildContext();
+      const result = AIChatService.processQuery(input, context);
+      this.removeTyping();
+      this.addStructuredMessage('ai', result);
+    } else {
+      const result = await AI.processInput(input, Tasks.getAll());
+      this.removeTyping();
+      this.addMessage('ai', result.text);
 
-    if (result.type === 'add_task' && result.data) {
-      const createdTask = Tasks.create(result.data);
-      if (typeof DB !== 'undefined') DB.addTask(createdTask);
-      App.renderCurrentView();
-      App.updateBadges();
-      showToast('Task created via AI! 🤖', 'success');
-      Notifications.scheduleAll(Tasks.getAll());
-    }
-
-    // Speak response (short ones only)
-    if (result.text.length < 200 && Voice.isSupported()) {
-      // Voice.speak(result.text); // Uncomment to enable auto-speak
+      if (result.type === 'add_task' && result.data) {
+        const createdTask = Tasks.create(result.data);
+        if (typeof DB !== 'undefined') DB.addTask(createdTask);
+        App.renderCurrentView();
+        App.updateBadges();
+        showToast('Task created via AI! 🤖', 'success');
+        Notifications.scheduleAll(Tasks.getAll());
+      }
     }
   },
 
@@ -280,6 +360,7 @@ const AiChat = {
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
+    input.style.height = 'auto'; // Reset height after sending
     
     // Un-hide quick actions when input is cleared
     const quickActions = document.querySelector('.ai-quick-actions');
@@ -291,7 +372,7 @@ const AiChat = {
   greet() {
     setTimeout(() => {
       const suggestion = AI.getContextualSuggestion(Tasks.getAll());
-      this.addMessage('ai', `Hello! I'm **NEXUS**, your AI productivity companion. ${suggestion.title} — ${suggestion.body}`);
+      this.addMessage('ai', `Hello! I'm **TACTIC**, your AI productivity companion. ${suggestion.title} — ${suggestion.body}`);
     }, 800);
   },
 };
@@ -391,8 +472,7 @@ const CalendarView = {
       cell.addEventListener('click', () => {
         const iso = cell.dataset.date;
         if (iso) {
-          $('task-date-input') && ($('task-date-input').value = iso.slice(0,16));
-          TaskModal.open();
+          TaskModal.open(null, { dueDate: iso.slice(0,16) });
         }
       });
     });
@@ -428,9 +508,7 @@ const CalendarView = {
             // Prepopulate New Task with holiday name
             div.onclick = (evt) => {
               evt.stopPropagation();
-              if ($('task-title-input')) $('task-title-input').value = `Plan for ${e.title}`;
-              if ($('task-date-input')) $('task-date-input').value = `${dateStr}T09:00`;
-              TaskModal.open();
+              TaskModal.open(null, { title: `Plan for ${e.title}`, dueDate: `${dateStr}T09:00` });
             };
             c.appendChild(div);
           });
@@ -538,8 +616,8 @@ const HabitsView = {
     DB.saveGoals(Habits.getGoals());
     this.renderGoals(); 
   },
-  addMilestone(gid) {
-    const title = prompt('Milestone name:');
+  async addMilestone(gid) {
+    const title = await window.tacticModal.open({ type: 'milestone', title: 'Add Milestone' });
     if (title) {
       Habits.addMilestone(gid, title);
       DB.saveGoals(Habits.getGoals());
@@ -547,18 +625,23 @@ const HabitsView = {
       showToast('Milestone added!', 'success');
     }
   },
-  deleteGoal(id) {
-    if (confirm('Delete this goal?')) {
+  async deleteGoal(id) {
+    const confirmed = await window.tacticModal.open({ type: 'confirm', title: 'Delete Goal?', message: 'Are you sure you want to delete this goal?' });
+    if (confirmed) {
       Habits.deleteGoal(id);
       DB.saveGoals(Habits.getGoals());
       this.renderGoals();
       showToast('Goal deleted', 'info');
     }
   },
-  deleteHabit(id) { 
-    Habits.deleteHabit(id); 
-    DB.saveHabits(Habits.getHabits());
-    this.renderHabits(); 
+  async deleteHabit(id) { 
+    const confirmed = await window.tacticModal.open({ type: 'confirm', title: 'Delete Habit?', message: 'Are you sure you want to delete this habit?' });
+    if (confirmed) {
+      Habits.deleteHabit(id); 
+      DB.saveHabits(Habits.getHabits());
+      this.renderHabits(); 
+      showToast('Habit deleted', 'info');
+    }
   },
 };
 
@@ -607,7 +690,7 @@ const AnalyticsView = {
 
 /* ── Settings ── */
 const SettingsView = {
-  load() {
+  async load() {
     const settings = JSON.parse(localStorage.getItem('nexus_settings') || '{}');
     const notifToggle = $('notif-toggle');
     const voiceToggle = $('voice-toggle');
@@ -616,16 +699,103 @@ const SettingsView = {
     if (notifToggle) notifToggle.checked = settings.notifications !== false;
     if (voiceToggle) voiceToggle.checked = settings.voice !== false;
     if (aiPersonality) aiPersonality.value = settings.personality || 'coach';
+
+    // Helper to disable input fields during loading
+    const setFieldsDisabled = (disabled) => {
+      $qa('#settings-view .form-input, #settings-view .form-select, #settings-save-btn').forEach(el => {
+        el.disabled = disabled;
+      });
+    };
+
+
+    setFieldsDisabled(true);
+
+    try {
+      // Load Routine
+      if (typeof ScheduleService !== 'undefined') {
+        const routine = await ScheduleService.getRoutine(true);
+        
+        if (routine) {
+          if ($('routine-wakeup')) $('routine-wakeup').value = routine.wakeUp || '';
+          if ($('routine-sleep')) $('routine-sleep').value = routine.sleep || '';
+          if ($('routine-collegestart')) $('routine-collegestart').value = routine.collegeStart || '';
+          if ($('routine-collegeend')) $('routine-collegeend').value = routine.collegeEnd || '';
+          if ($('routine-travel')) $('routine-travel').value = routine.travelTimeMins || '';
+          if ($('routine-lunch')) $('routine-lunch').value = routine.lunchTime || '';
+          if ($('routine-dinner')) $('routine-dinner').value = routine.dinnerTime || '';
+          if ($('routine-gym')) $('routine-gym').value = routine.gymTime || '';
+          if ($('routine-studydur')) $('routine-studydur').value = routine.studyDurMins || '';
+          if ($('routine-pomodoro')) $('routine-pomodoro').value = routine.pomodoroMins || '';
+          if ($('routine-peakstart')) $('routine-peakstart').value = routine.peakFocusStart || '';
+          if ($('routine-peakend')) $('routine-peakend').value = routine.peakFocusEnd || '';
+        }
+      }
+    } catch (e) {
+      console.error('[SettingsView] Load settings error:', e);
+      showToast('Error loading routine settings', 'error');
+    } finally {
+      setFieldsDisabled(false);
+    }
+
+
   },
 
-  save() {
-    const settings = {
-      notifications: $('notif-toggle')?.checked ?? true,
-      voice:         $('voice-toggle')?.checked ?? true,
-      personality:   $('ai-personality')?.value || 'coach',
+  async save() {
+    const saveBtn = $('settings-save-btn');
+    const setFieldsDisabled = (disabled) => {
+      $qa('#settings-view .form-input, #settings-view .form-select').forEach(el => {
+        el.disabled = disabled;
+      });
+      if (saveBtn) {
+        saveBtn.disabled = disabled;
+        saveBtn.textContent = disabled ? 'Saving settings... ⏳' : 'Save Settings';
+      }
     };
-    localStorage.setItem('nexus_settings', JSON.stringify(settings));
-    showToast('Settings saved!', 'success');
+
+    setFieldsDisabled(true);
+
+    try {
+      const settings = {
+        notifications: $('notif-toggle')?.checked ?? true,
+        voice:         $('voice-toggle')?.checked ?? true,
+        personality:   $('ai-personality')?.value || 'coach',
+      };
+      localStorage.setItem('nexus_settings', JSON.stringify(settings));
+
+      // Save Routine
+      if (typeof ScheduleService !== 'undefined') {
+        const routineData = {
+          wakeUp: $('routine-wakeup')?.value,
+          sleep: $('routine-sleep')?.value,
+          collegeStart: $('routine-collegestart')?.value,
+          collegeEnd: $('routine-collegeend')?.value,
+          travelTimeMins: $('routine-travel')?.value,
+          lunchTime: $('routine-lunch')?.value,
+          dinnerTime: $('routine-dinner')?.value,
+          gymTime: $('routine-gym')?.value,
+          studyDurMins: $('routine-studydur')?.value,
+          pomodoroMins: $('routine-pomodoro')?.value,
+          peakFocusStart: $('routine-peakstart')?.value,
+          peakFocusEnd: $('routine-peakend')?.value
+        };
+        
+        try {
+          console.log('[SettingsView] Calling updateRoutine with:', routineData);
+          await ScheduleService.updateRoutine(routineData);
+        } catch (err) {
+          console.error('[SettingsView] updateRoutine error:', err);
+          showToast('Invalid routine data', 'error');
+          return;
+        }
+      }
+
+      showToast('Settings saved!', 'success');
+    } catch (e) {
+      console.error('[SettingsView] Save settings error:', e);
+      showToast('Failed to save settings', 'error');
+    } finally {
+      setFieldsDisabled(false);
+    }
   },
 
   exportData() {
@@ -677,7 +847,7 @@ const TasksView = {
   renderList(tasks, container) {
     if (!container) return;
     if (!tasks.length) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎯</div><h4>All clear!</h4><p>No tasks here. Add one above or ask NEXUS AI to help plan your day.</p></div>`;
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎯</div><h4>All clear!</h4><p>No tasks here. Add one above or ask TACTIC to help plan your day.</p></div>`;
       return;
     }
 
@@ -690,7 +860,7 @@ const TasksView = {
       return `
         <div class="task-card${task.completed ? ' completed' : ''}" data-priority="${task.priority}" data-id="${task.id}">
           <div class="task-check${task.completed ? ' checked' : ''}" data-id="${task.id}" onclick="TasksView.toggleTask(event, '${task.id}')"></div>
-          <div class="task-body">
+          <div class="task-body" style="cursor:pointer;" onclick="TasksView.handleTaskBodyClick('${task.id}')">
             <div class="task-title">${task.title}</div>
             ${task.desc ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical">${task.desc}</div>` : ''}
             <div class="task-meta">
@@ -719,6 +889,28 @@ const TasksView = {
       el.style.transform = 'translateY(8px)';
       setTimeout(() => { el.style.transition = 'all 0.3s ease'; el.style.opacity = ''; el.style.transform = ''; }, i * 40);
     });
+  },
+
+  async handleTaskBodyClick(id) {
+    const task = Tasks.getById(id);
+    if (!task) return;
+
+    const now = new Date();
+    const isOverdue = task.dueDate && new Date(task.dueDate) < now && new Date(task.dueDate).toDateString() !== now.toDateString();
+
+    if (isOverdue && !task.completed) {
+      AiChat.open();
+      AiChat.addMessage('ai', `I see you're looking at **${task.title}** which is overdue. Let me give you a quick personalized strategy...`);
+      AiChat.showTyping();
+      
+      const prompt = `My task "${task.title}" is overdue. CRITICAL INSTRUCTION: ONLY give advice regarding this specific task. DO NOT mention any other tasks. Give me a highly motivating 2-sentence personalized tip on exactly how to start and complete it right now.`;
+      const res = await AI.processInput(prompt, [task], true);
+      
+      AiChat.removeTyping();
+      AiChat.addMessage('ai', res.text);
+    } else {
+      TaskModal.open(task);
+    }
   },
 
   toggleTask(e, id) {
@@ -756,6 +948,535 @@ const TasksView = {
 
 /* ── Dashboard ── */
 const Dashboard = {
+  showTimelineActivity(metaStr) {
+    if (typeof TacticModal === 'undefined') return;
+    try {
+      const meta = JSON.parse(decodeURIComponent(metaStr));
+      const html = `
+        <div style="font-size:0.9rem; color:var(--text-secondary); line-height:1.6;">
+          <div style="margin-bottom:12px;"><strong>Scheduled Time:</strong> ${meta.startTime} – ${meta.endTime} (${meta.duration}m)</div>
+          <div style="margin-bottom:12px;"><strong>Category:</strong> ${meta.category}</div>
+          <div style="margin-bottom:12px;"><strong>Priority:</strong> ${meta.priority}</div>
+          <div style="margin-bottom:12px;"><strong>Status:</strong> ${meta.status || 'Pending'}</div>
+          ${meta.confidence ? `<div style="margin-bottom:12px;"><strong>AI Confidence:</strong> ${meta.confidence}%</div>` : ''}
+          <div style="margin-top:20px; text-align:center;">
+             ${meta.id ? `<button class="btn btn-primary" style="margin-right:8px;" onclick="console.log('Go to Task', '${meta.id}')">Open</button>` : ''}
+             <button class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);" onclick="TacticModal.hide()">Close Details</button>
+          </div>
+        </div>
+      `;
+      TacticModal.show(html, { title: meta.title });
+    } catch (e) {
+      console.error('Failed to parse timeline activity meta', e);
+    }
+  },
+  showTooltip(e, metaStr) {
+    let tt = document.getElementById('gantt-custom-tooltip');
+    if (!tt) {
+      tt = document.createElement('div');
+      tt.id = 'gantt-custom-tooltip';
+      document.body.appendChild(tt);
+    }
+    try {
+      const meta = JSON.parse(decodeURIComponent(metaStr));
+      tt.innerHTML = `
+        <div class="gantt-tooltip-title">${meta.title}</div>
+        <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Category:</span><span>${meta.category}</span></div>
+        <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Time:</span><span>${meta.startTime} - ${meta.endTime} (${meta.duration}m)</span></div>
+        <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Priority:</span><span>${meta.priority}</span></div>
+        <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Status:</span><span>${meta.status || 'Pending'}</span></div>
+        <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Est. Completion:</span><span>${meta.probability || '95%'}</span></div>
+        <div class="gantt-tooltip-row" style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1);">
+          <span class="gantt-tooltip-label" style="color:var(--neon-green);">AI Recommendation:</span>
+          <span>${meta.recommendation || 'Proceed as scheduled.'}</span>
+        </div>
+      `;
+      tt.style.display = 'block';
+      let x = e.clientX + 15;
+      let y = e.clientY + 15;
+      if (x + 280 > window.innerWidth) x = e.clientX - 290;
+      if (y + 180 > window.innerHeight) y = e.clientY - 190;
+      tt.style.left = x + 'px';
+      tt.style.top = y + 'px';
+    } catch(err) {
+      console.error(err);
+    }
+  },
+  hideTooltip() {
+    const tt = document.getElementById('gantt-custom-tooltip');
+    if (tt) tt.style.display = 'none';
+  },
+  async planDay(forceRegenerate = false) {
+    const container = $('todays-plan-content');
+    const section = $('todays-plan-section');
+    if (!container || !section) return;
+
+    section.style.display = 'block';
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    // Check for existing plan if not regenerating
+    if (!forceRegenerate && typeof DB !== 'undefined') {
+      const existingPlan = await DB.getDailyPlan(todayStr);
+      if (existingPlan) {
+        this.renderPlan(existingPlan);
+        container.innerHTML = `
+          <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:8px; margin-bottom:20px; text-align:center; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="margin-bottom:12px; font-weight:600;">You already have a generated plan for today.</div>
+            <div style="display:flex; gap:12px; justify-content:center;">
+              <button class="btn btn-primary" onclick="Dashboard.planDay(true)">Regenerate Plan</button>
+            </div>
+          </div>
+        ` + container.innerHTML;
+        return;
+      }
+    }
+
+    container.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;text-align:center;padding:20px;">Analyzing workload and generating intelligent schedule... ⏳</div>';
+
+    if (typeof AIPlannerService !== 'undefined') {
+      const user = typeof Auth !== 'undefined' ? Auth.getUser() : null;
+      const plan = await AIPlannerService.generateDailyPlan(user ? user.uid : 'guest');
+      this.renderPlan(plan);
+    } else {
+      container.innerHTML = '<div style="color:red;text-align:center;">AIPlannerService not found</div>';
+    }
+  },
+
+  renderPlan(plan) {
+    const container = $('todays-plan-content');
+    if (!container) return;
+
+    // Build Strategy block
+    let strategyHtml = `
+      <div style="margin-bottom: 20px; padding: 15px; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.2); border-radius: 8px;">
+        <h4 style="color:var(--neon-purple); margin:0 0 10px 0; font-family:'Orbitron', sans-serif;">🧠 TACTIC AI Strategy</h4>
+        <div style="font-size: 0.85rem; color: var(--text-secondary); line-height:1.6;">
+          ${plan.strategy.summary.replace(/\n/g, '<br>')}
+        </div>
+        ${plan.strategy.studyAnalysis ? `
+        <div style="margin-top: 10px; font-size: 0.85rem; color: var(--neon-cyan); border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+          ${plan.strategy.studyAnalysis}
+        </div>` : ''}
+        <div style="margin-top: 10px; font-size: 0.85rem; color: var(--text-primary); border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+          ${plan.strategy.recommendation}
+        </div>
+        <div style="margin-top: 10px; font-size: 0.85rem; font-style: italic; color: var(--neon-green);">
+          "${plan.strategy.motivation}"
+        </div>
+      </div>
+    `;
+
+    // Timeline HTML generation removed in favor of Premium Gantt Chart below
+
+    // Build Available Study Time block (Redesigned to "Best Study Window")
+    let studyHtml = `
+      <div style="background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:15px; position:sticky; top:20px;">
+        <h4 style="color:var(--neon-cyan); margin:0 0 15px 0; font-family:'Orbitron', sans-serif;">⭐ Best Study Window</h4>
+    `;
+    
+    if (plan.remainingStudyMins > 0 && plan.goalSuggestions && plan.goalSuggestions.length > 0) {
+      const bestSlot = plan.goalSuggestions.reduce((prev, curr) => (prev.duration > curr.duration) ? prev : curr);
+      
+      studyHtml += `
+        <div class="best-study-window">
+          <div style="font-size:1.2rem; font-weight:700; color:var(--text-primary); margin-bottom:8px;">${bestSlot.startTime} – ${bestSlot.endTime}</div>
+          <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:12px;">Longest uninterrupted focus session (${bestSlot.duration}m).</div>
+        </div>
+      `;
+
+      studyHtml += `
+        <h4 style="color:var(--neon-green); margin:0 0 10px 0; font-size:0.9rem; text-transform:uppercase;">🎯 Goal Recommendations</h4>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+      `;
+      plan.goalSuggestions.forEach(s => {
+        studyHtml += `
+          <div style="background:rgba(0,255,136,0.05); border:1px solid rgba(0,255,136,0.1); border-radius:6px; padding:12px;">
+            <div style="font-weight:600; font-size:0.9rem; color:var(--text-primary); margin-bottom:4px;">${s.goalTitle}</div>
+            <div style="font-size:0.75rem; color:var(--neon-cyan); margin-bottom:8px;">Recommended: ${s.startTime} – ${s.endTime}</div>
+            <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.4;">${s.reason}</div>
+          </div>
+        `;
+      });
+      studyHtml += `</div>`;
+    } else {
+      studyHtml += `<div style="font-size:0.9rem; color:var(--text-muted);">Your schedule is fully packed today! No free study windows remaining.</div>`;
+    }
+    
+    studyHtml += `</div>`;
+
+    // ==========================================
+    // SPRINT: AI Execution Summary & Gantt Chart
+    // ==========================================
+    
+    let plannedMins = 0;
+    let studyMins = 0;
+    let goalMins = 0;
+    let habitCount = 0;
+    let taskCount = 0;
+    let totalWorkingMins = 0;
+
+    let minStartMins = 1440;
+    let maxEndMins = 0;
+
+    plan.timeline.forEach(block => {
+      if (block.startMins < minStartMins) minStartMins = block.startMins;
+      if (block.endMins > maxEndMins) maxEndMins = block.endMins;
+      
+      const dur = block.endMins - block.startMins;
+      
+      if (block.type === 'task') {
+        taskCount++;
+        plannedMins += dur;
+        totalWorkingMins += dur;
+        if (block.category && typeof block.category === 'string' && (block.category.toLowerCase().includes('study') || block.category.toLowerCase().includes('learning'))) studyMins += dur;
+        else studyMins += dur; 
+      } else if (block.type === 'habit') {
+        habitCount++;
+        plannedMins += dur;
+        totalWorkingMins += dur;
+      } else if (block.type === 'goal') {
+        goalMins += dur;
+        plannedMins += dur;
+        totalWorkingMins += dur;
+      }
+    });
+
+    const formatDur = mins => {
+      if (mins === 0) return '0m';
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm' : ''}`.trim();
+    };
+
+    const totalAvailable = totalWorkingMins + plan.remainingStudyMins;
+    const prodUtil = totalAvailable > 0 ? Math.round((totalWorkingMins / totalAvailable) * 100) : 0;
+    const aiScore = Math.min(100, Math.max(0, prodUtil > 0 ? prodUtil + (habitCount * 2) + (plan.remainingStudyMins > 0 ? 5 : -5) : 85));
+
+    let bestFocus = 'Flexible';
+    if (plan.routineSnapshot && plan.routineSnapshot.peakFocusStart && plan.routineSnapshot.peakFocusEnd) {
+      bestFocus = `${plan.routineSnapshot.peakFocusStart} – ${plan.routineSnapshot.peakFocusEnd}`;
+    }
+
+    let mainFocus = 'Daily Productivity';
+    if (plan.goalSuggestions && plan.goalSuggestions.length > 0) {
+      mainFocus = plan.goalSuggestions[0].goalTitle;
+    }
+    
+    let highestPriorityTask = 'None';
+    let hpBlock = plan.timeline.find(b => b.priority === 'critical');
+    if (!hpBlock) hpBlock = plan.timeline.find(b => b.priority === 'high' || b.priority === 'urgent');
+    if (hpBlock) highestPriorityTask = hpBlock.title;
+
+    // Insights extraction
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    
+    let nextBlock = plan.timeline.find(b => b.endMins > currentMins && b.type !== 'break' && b.status !== 'completed');
+    let nextBestActionTitle = 'No pending actions';
+    let nextBestActionDesc = 'You have finished everything for today!';
+    if (nextBlock) {
+      nextBestActionTitle = nextBlock.title;
+      let dur = nextBlock.endMins - Math.max(currentMins, nextBlock.startMins);
+      nextBestActionDesc = `Do this for the next ${dur} minutes.`;
+    }
+
+    let priorityAlertTitle = "No urgent tasks today.";
+    let priorityAlertDesc = "You have a great opportunity for deep work.";
+    let priorityClass = "";
+    if (hpBlock) {
+      priorityAlertTitle = hpBlock.title;
+      priorityAlertDesc = `This task is marked as ${hpBlock.priority}. Ensure it is completed today.`;
+      priorityClass = "alert-urgent";
+    }
+
+    let goalProgressStr = "No goals scheduled today.";
+    if (plan.goalSuggestions && plan.goalSuggestions.length > 0) {
+      goalProgressStr = `Scheduled ${formatDur(plan.goalSuggestions[0].duration)} for "${plan.goalSuggestions[0].goalTitle}".`;
+    }
+
+    let aiTipStr = "Maintain a steady pace and avoid distractions.";
+    if (plan.remainingStudyMins > 120) {
+      aiTipStr = "You have plenty of free time today. Consider using a 90-minute block for deep learning.";
+    } else if (plan.strategy?.workload === 'High') {
+      aiTipStr = "Your workload is high today. Stick strictly to your schedule and don't skip your breaks.";
+    } else if (habitCount > 3) {
+      aiTipStr = "You have a strong habit stack today. Complete them early for momentum.";
+    }
+
+    const aiInsightsHtml = `
+      <div style="margin-bottom: 24px;">
+        <h3 style="color:var(--text-primary); margin:0 0 4px 0; font-family:'Orbitron', sans-serif;">🤖 AI Productivity Insights</h3>
+        <div style="color:var(--text-muted); font-size:0.85rem; margin-bottom: 16px;">Real-time analysis of your optimized schedule.</div>
+        
+        <div class="ai-insights-grid">
+          <!-- Card: Main Goal -->
+          <div class="ai-insight-card-premium">
+            <div class="insight-header"><span class="icon">🎯</span> Today's Main Goal</div>
+            <div class="insight-value">${mainFocus}</div>
+          </div>
+
+          <!-- Card: Best Study Window -->
+          <div class="ai-insight-card-premium">
+            <div class="insight-header"><span class="icon">📚</span> Best Study Window</div>
+            <div class="insight-value">${bestFocus}</div>
+            <div class="insight-desc">Reason: Highest focus period with no conflicts.</div>
+          </div>
+
+          <!-- Card: Next Best Action -->
+          <div class="ai-insight-card-premium">
+            <div class="insight-header"><span class="icon">⚡</span> Next Best Action</div>
+            <div class="insight-value">${nextBestActionTitle}</div>
+            <div class="insight-desc">${nextBestActionDesc}</div>
+          </div>
+
+          <!-- Card: Priority Alert -->
+          <div class="ai-insight-card-premium ${priorityClass}">
+            <div class="insight-header"><span class="icon">🔥</span> Priority Alert</div>
+            <div class="insight-value">${priorityAlertTitle}</div>
+            <div class="insight-desc">${priorityAlertDesc}</div>
+          </div>
+
+          <!-- Card: Free Productive Time -->
+          <div class="ai-insight-card-premium">
+            <div class="insight-header"><span class="icon">🟢</span> Free Productive Time</div>
+            <div class="insight-value">${formatDur(plan.remainingStudyMins)} available</div>
+          </div>
+
+          <!-- Card: Goal Progress -->
+          <div class="ai-insight-card-premium">
+            <div class="insight-header"><span class="icon">🎯</span> Goal Progress</div>
+            <div class="insight-value">${goalProgressStr}</div>
+          </div>
+
+          <!-- Card: AI Tip of the Day -->
+          <div class="ai-insight-card-premium tip-card">
+            <div class="insight-header"><span class="icon">💡</span> AI Tip of the Day</div>
+            <div class="insight-desc" style="font-size:0.95rem; line-height:1.5;">${aiTipStr}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    if (window.ganttInterval) clearInterval(window.ganttInterval);
+
+    // Build Premium Gantt Chart
+    let ganttHeaderHours = '';
+    for (let i = 0; i < 24; i++) {
+      ganttHeaderHours += `<div class="gantt-hour-marker">${i.toString().padStart(2, '0')}:00</div>`;
+    }
+
+    let ganttRowsHtml = '';
+    plan.timeline.forEach(block => {
+      let barClass = 'routine';
+      let icon = '🕒';
+      
+      if (block.status === 'completed') {
+        barClass = 'completed';
+        icon = '✓';
+      } else if (block.type === 'habit') {
+        barClass = 'habit';
+        icon = '🌱';
+      } else if (block.type === 'goal') {
+        barClass = 'goal';
+        icon = '🎯';
+      } else if (block.type === 'task') {
+        icon = '📝';
+        let cat = (block.category || '').toLowerCase();
+        if (cat.includes('study') || cat.includes('learning')) {
+          barClass = 'study';
+          icon = '📚';
+        } else if (block.priority === 'critical' || block.priority === 'urgent') {
+          barClass = 'task-critical';
+          icon = '🔥';
+        } else if (block.priority === 'high') {
+          barClass = 'task-high';
+          icon = '⚡';
+        } else if (block.priority === 'medium') {
+          barClass = 'task-medium';
+        } else {
+          barClass = 'task-low';
+        }
+      } else if (block.type === 'break') {
+        icon = '☕';
+        barClass = 'routine';
+      }
+
+      const dt = new Date();
+      const currentMins = dt.getHours() * 60 + dt.getMinutes();
+      if (block.status !== 'completed' && block.startMins <= currentMins && block.endMins >= currentMins) {
+        barClass += ' current';
+      } else if (block.status !== 'completed' && block.endMins < currentMins && block.type === 'task') {
+        barClass += ' overdue';
+      }
+
+      let leftPct = (block.startMins / 1440) * 100;
+      let widthPct = (block.duration / 1440) * 100;
+      if (widthPct < 0.5) widthPct = 0.5;
+
+      const priorityStr = block.priority ? block.priority.charAt(0).toUpperCase() + block.priority.slice(1) : 'Normal';
+      const catStr = block.category || 'General';
+      const confStr = block.confidence !== undefined ? `${block.confidence}%` : 'N/A';
+      const statusStr = block.status === 'completed' ? 'Completed' : (barClass.includes('current') ? 'In Progress' : (barClass.includes('overdue') ? 'Overdue' : 'Pending'));
+      const reasonStr = block.reason ? `<div class="gantt-tooltip-row" style="margin-top:6px; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px;"><span class="gantt-tooltip-label">AI Reason:</span><span class="gantt-tooltip-value" style="text-align:right;">${block.reason}</span></div>` : '';
+
+      const tooltipHtml = `
+          <div class="gantt-tooltip-header">${icon} ${block.title}</div>
+          <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Category:</span><span class="gantt-tooltip-value">${catStr}</span></div>
+          <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Priority:</span><span class="gantt-tooltip-value">${priorityStr}</span></div>
+          <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Date:</span><span class="gantt-tooltip-value">Today</span></div>
+          <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Time:</span><span class="gantt-tooltip-value">${block.startTime} – ${block.endTime}</span></div>
+          <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Duration:</span><span class="gantt-tooltip-value">${block.duration}m</span></div>
+          <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">AI Confidence:</span><span class="gantt-tooltip-value">${confStr}</span></div>
+          <div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Status:</span><span class="gantt-tooltip-value">${statusStr}</span></div>
+          ${reasonStr}
+      `;
+
+      let overdueBadge = '';
+      if (barClass.includes('overdue')) overdueBadge = '<div class="gantt-overdue-badge">⚠ Overdue</div>';
+      else if (block.isRescheduled) overdueBadge = '<div class="gantt-rescheduled-badge">Rescheduled by AI</div>';
+
+      ganttRowsHtml += `
+        <div class="gantt-row">
+          <div class="gantt-sidebar-cell">
+            <span class="gantt-sidebar-cell-icon">${icon}</span>
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${block.title}</span>
+          </div>
+          <div class="gantt-timeline-area">
+            <div class="gantt-bar-wrapper" style="left: ${leftPct}%; width: ${widthPct}%;">
+              <div class="gantt-bar ${barClass}">
+                <span class="gantt-bar-icon">${icon}</span>
+                <div class="gantt-bar-title">
+                  <span>${block.title}</span>
+                  <span class="gantt-bar-time">${block.startTime} – ${block.endTime}</span>
+                </div>
+                ${overdueBadge}
+              </div>
+              ${barClass.includes('current') ? '<div class="gantt-live-badge">LIVE</div>' : ''}
+              <template class="tooltip-data">${tooltipHtml}</template>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    if (plan.timeline.length === 0) {
+      ganttRowsHtml = `<div style="padding: 30px; text-align: center; color: var(--text-muted); font-size: 0.9rem;">No activity scheduled for today.</div>`;
+    }
+
+    const ganttLegendHtml = `
+      <div class="gantt-legend">
+        <div class="gantt-legend-item" data-cat="routine"><div class="gantt-legend-dot" style="background: var(--gantt-routine-bg);"></div> Routine</div>
+        <div class="gantt-legend-item" data-cat="task-low"><div class="gantt-legend-dot" style="background: var(--gantt-task-low-bg);"></div> Low Priority Task</div>
+        <div class="gantt-legend-item" data-cat="task-medium"><div class="gantt-legend-dot" style="background: var(--gantt-task-med-bg);"></div> Medium Priority Task</div>
+        <div class="gantt-legend-item" data-cat="task-high"><div class="gantt-legend-dot" style="background: var(--gantt-task-high-bg);"></div> High Priority Task</div>
+        <div class="gantt-legend-item" data-cat="task-critical"><div class="gantt-legend-dot" style="background: var(--gantt-task-crit-bg);"></div> Urgent / Overdue</div>
+        <div class="gantt-legend-item" data-cat="habit"><div class="gantt-legend-dot" style="background: var(--gantt-habit-bg);"></div> Habit</div>
+        <div class="gantt-legend-item" data-cat="goal"><div class="gantt-legend-dot" style="background: var(--gantt-goal-bg);"></div> Goal</div>
+        <div class="gantt-legend-item" data-cat="study"><div class="gantt-legend-dot" style="background: var(--gantt-study-bg);"></div> Study</div>
+        <div class="gantt-legend-item" data-cat="completed"><div class="gantt-legend-dot" style="background: var(--gantt-completed-bg);"></div> Completed</div>
+      </div>
+    `;
+
+    let ganttHtml = `
+      <div class="gantt-wrapper" id="plan-gantt-chart">
+        ${ganttLegendHtml}
+        <div class="gantt-header-row">
+          <div class="gantt-sidebar-header" style="display:flex; flex-direction:column; align-items:flex-start; justify-content:center;">
+            <div style="font-size:0.95rem; font-weight:800;">🚀 Today's AI Timeline</div>
+            <div style="font-size:0.65rem; color:var(--text-muted); font-weight:normal; margin-top:2px;">Generated from your routine, tasks, habits and goals.</div>
+          </div>
+          <div class="gantt-timeline-header" id="gantt-header-scroll">
+            ${ganttHeaderHours}
+          </div>
+        </div>
+        <div class="gantt-body-scroll" id="gantt-body-scroll">
+          ${ganttRowsHtml}
+          <div class="gantt-now-indicator" id="gantt-now-indicator"><div class="gantt-now-label">NOW</div></div>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = `
+      <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+        <div style="flex:2; min-width:300px;">
+          ${strategyHtml}
+          ${aiInsightsHtml}
+        </div>
+        <div style="flex:1; min-width:260px;">
+          ${studyHtml}
+        </div>
+      </div>
+      ${ganttHtml}
+    `;
+
+    // Sync scroll, handle tooltips and set interval
+    setTimeout(() => {
+      const header = document.getElementById('gantt-header-scroll');
+      const body = document.getElementById('gantt-body-scroll');
+      let initialScrolled = false;
+      if (header && body) {
+        body.addEventListener('scroll', () => {
+          header.scrollLeft = body.scrollLeft;
+        });
+      }
+
+      // Portal Tooltip Setup
+      let globalTooltip = document.getElementById('global-gantt-tooltip');
+      if (!globalTooltip) {
+        globalTooltip = document.createElement('div');
+        globalTooltip.id = 'global-gantt-tooltip';
+        globalTooltip.className = 'gantt-tooltip-global';
+        document.body.appendChild(globalTooltip);
+      }
+      
+      const bars = document.querySelectorAll('.gantt-bar-wrapper');
+      bars.forEach(bar => {
+        bar.addEventListener('mouseenter', (e) => {
+          const tmpl = bar.querySelector('.tooltip-data');
+          if (tmpl) {
+            globalTooltip.innerHTML = tmpl.innerHTML;
+            globalTooltip.style.display = 'block';
+            const rect = bar.getBoundingClientRect();
+            // Position tooltip above the bar, centered
+            globalTooltip.style.left = (rect.left + rect.width / 2) + 'px';
+            globalTooltip.style.top = (rect.top - 10) + 'px';
+            globalTooltip.style.transform = 'translate(-50%, -100%)';
+            setTimeout(() => globalTooltip.style.opacity = '1', 10);
+          }
+        });
+        bar.addEventListener('mouseleave', () => {
+          globalTooltip.style.opacity = '0';
+          setTimeout(() => globalTooltip.style.display = 'none', 200);
+        });
+      });
+
+      const updateNowIndicator = () => {
+        const ind = document.getElementById('gantt-now-indicator');
+        if (ind && body) {
+          const nowDt = new Date();
+          const mins = nowDt.getHours() * 60 + nowDt.getMinutes();
+          const pct = (mins / 1440) * 100;
+          ind.style.left = pct + '%';
+          
+          const label = ind.querySelector('.gantt-now-label');
+          if (label) {
+            const timeStr = nowDt.getHours().toString().padStart(2, '0') + ':' + nowDt.getMinutes().toString().padStart(2, '0');
+            label.textContent = 'NOW • ' + timeStr;
+          }
+          
+          if (!initialScrolled) {
+             const targetScroll = (body.scrollWidth * (pct / 100)) - (body.clientWidth / 2) + 100;
+             if (targetScroll > 0) body.scrollLeft = targetScroll;
+             initialScrolled = true;
+          }
+        }
+      };
+      updateNowIndicator();
+      window.ganttInterval = setInterval(updateNowIndicator, 60000);
+    }, 100);
+  },
+
   render() {
     const stats = Tasks.getStats();
     const ring = $('dash-ring');
@@ -789,14 +1510,10 @@ const Dashboard = {
       }
     }
 
-    // AI Insight
-    const insight = AI.getContextualSuggestion(Tasks.getAll());
-    const insEl = $('ai-insight-text');
-    const insTitle = $('ai-insight-title');
-    const insIcon  = $('ai-insight-icon');
-    if (insEl)    insEl.textContent   = insight.body;
-    if (insTitle) insTitle.textContent = insight.title;
-    if (insIcon)  insIcon.textContent  = insight.icon;
+    // Smart AI Coach Recommendations
+    if (typeof AIRecommendationService !== 'undefined') {
+      AIRecommendationService.renderToDashboard();
+    }
 
     // Today's tasks
     const todayTasks = Tasks.getByFilter('today').sort((a,b) => AI.scorePriority(b) - AI.scorePriority(a));
@@ -836,13 +1553,45 @@ const App = {
     Auth.init(async (user) => {
       // Auth state changed — re-init DB and reload data
       DB.init(user, () => { Tasks.load(); Habits.load(); this.renderCurrentView(); this.updateBadges(); });
+      
+      let onboardingCompleted = true;
+      if (DB.getMode() === 'firestore' && user && !user.isGuest) {
+        try {
+          const profile = await DB.getUserProfile();
+          if (profile && profile.onboardingCompleted) {
+            onboardingCompleted = true;
+            // Pre-load default daily routine settings in ScheduleService
+            const routine = await DB.getRoutine();
+            if (routine && typeof ScheduleService !== 'undefined') {
+              await ScheduleService.updateRoutine(ScheduleService.mapDbToInternal(routine));
+            }
+          } else {
+            onboardingCompleted = false;
+          }
+        } catch (e) {
+          console.warn('[App] Onboarding status check error:', e);
+        }
+      }
+
       if (DB.getMode() === 'firestore') {
         const loaded = await DB.loadFromFirestore();
         if (loaded) { Tasks.load(); Habits.load(); }
-        showToast('☁ Cloud sync active — data saved to Firebase!', 'success', 3000);
+        if (onboardingCompleted) {
+          showToast('☁ Cloud sync active — data saved to Firebase!', 'success', 3000);
+        }
       }
-      // Only show toast on explicit sign-in (not on every page load in offline mode)
-      this.renderCurrentView();
+
+      // If onboarding is NOT completed, trigger onboarding flow
+      if (!onboardingCompleted && user && !user.isGuest) {
+        if (typeof Onboarding !== 'undefined') {
+          Onboarding.start(user);
+        }
+      } else {
+        const obScreen = document.getElementById('onboarding-screen');
+        if (obScreen) obScreen.style.display = 'none';
+      }
+
+      UI.showView(this.currentView);
       this.updateBadges();
     });
 
@@ -868,13 +1617,16 @@ const App = {
     this.showView('dashboard');
     this.updateBadges();
     AiChat.greet();
+    if (typeof AIRecommendationService !== 'undefined') {
+      AIRecommendationService.initAutoRefresh();
+    }
 
     // ── 7. Bind events ──
     this.bindEvents();
 
     if (!localStorage.getItem('nexus_welcomed')) {
       localStorage.setItem('nexus_welcomed', '1');
-      setTimeout(() => showToast('Welcome to NEXUS AI! 🚀 Your productivity companion is ready.', 'info', 4000), 1500);
+      setTimeout(() => showToast('Welcome to TACTIC! 🚀 Your productivity companion is ready.', 'info', 4000), 1500);
     }
   },
 
@@ -955,8 +1707,11 @@ const App = {
     $('ai-send-btn')?.addEventListener('click', () => AiChat.sendMessage());
     $('ai-chat-input')?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); AiChat.sendMessage(); } });
     
-    // Hide quick actions when typing
+    // Hide quick actions when typing and auto-resize input
     $('ai-chat-input')?.addEventListener('input', e => {
+      e.target.style.height = 'auto';
+      e.target.style.height = e.target.scrollHeight + 'px';
+
       const quickActions = document.querySelector('.ai-quick-actions');
       if (quickActions) {
         if (e.target.value.trim().length > 0) quickActions.classList.add('hidden');
@@ -1000,20 +1755,20 @@ const App = {
     $('clear-btn')?.addEventListener('click', () => SettingsView.clearData());
 
     // Add habit modal
-    $('add-habit-btn')?.addEventListener('click', () => {
-      const name = prompt('Habit name:');
-      if (name) {
-        Habits.createHabit({ name, icon: '⭐', color: '#00d4ff', target: 'daily' });
+    $('add-habit-btn')?.addEventListener('click', async () => {
+      const data = await window.tacticModal.open({ type: 'habit', title: 'Create Habit' });
+      if (data) {
+        Habits.createHabit(data);
         DB.saveHabits(Habits.getHabits());
         HabitsView.render();
         showToast('Habit created!', 'success');
       }
     });
 
-    $('add-goal-btn')?.addEventListener('click', () => {
-      const title = prompt('Goal title:');
-      if (title) {
-        Habits.createGoal({ title, icon: '🎯', color: '#a855f7' });
+    $('add-goal-btn')?.addEventListener('click', async () => {
+      const data = await window.tacticModal.open({ type: 'goal', title: 'Create Goal' });
+      if (data) {
+        Habits.createGoal(data);
         DB.saveGoals(Habits.getGoals());
         HabitsView.render();
         showToast('Goal created!', 'success');

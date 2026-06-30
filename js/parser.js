@@ -62,7 +62,7 @@ const Parser = (() => {
     const adviceText = advice ? `\n\nUSER SPECIAL INSTRUCTIONS: "${advice}"\nMake absolutely sure you follow these instructions when extracting.` : '';
 
     isParsing = true;
-    showToast('NEXUS AI is analyzing your datesheet... 🧠', 'info', 10000);
+    showToast('TACTIC is analyzing your datesheet... 🧠', 'info', 10000);
 
     try {
       let parts = [];
@@ -130,7 +130,7 @@ If no subjects/exams are found for the requested column, return an empty array [
       const extractedTasks = JSON.parse(jsonStr);
 
       if (!Array.isArray(extractedTasks) || extractedTasks.length === 0) {
-        showToast('NEXUS AI couldn\'t find any exams in that file.', 'warning');
+        showToast('TACTIC couldn\'t find any exams in that file.', 'warning');
         isParsing = false;
         return;
       }
@@ -171,7 +171,10 @@ If no subjects/exams are found for the requested column, return an empty array [
         DB.addTask(task);
         if (task.dueDate && window.GCal && window.GCal.isConnected()) {
           const eventId = await window.GCal.addEvent(task);
-          if (eventId) Tasks.update(task.id, { gcalEventId: eventId });
+          if (eventId) {
+            Tasks.update(task.id, { gcalEventId: eventId });
+            DB.updateTask(task.id, { gcalEventId: eventId });
+          }
         }
         created++;
       }
@@ -180,7 +183,7 @@ If no subjects/exams are found for the requested column, return an empty array [
       App.updateBadges();
       if (window.Notifications) Notifications.scheduleAll(Tasks.getAll());
 
-      showToast(`Success! NEXUS AI scheduled ${created} critical exam(s). 🎯`, 'success');
+      showToast(`Success! TACTIC scheduled ${created} critical exam(s). 🎯`, 'success');
 
     } catch (err) {
       console.error('Parser Error:', err);

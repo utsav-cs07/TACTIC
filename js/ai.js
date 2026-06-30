@@ -161,10 +161,15 @@ const AI = (() => {
 
   // ── Suggestions Engine ──
   const suggestionTemplates = {
+    overloaded: (count) => ({
+      icon: '⚠️',
+      title: 'Workload Warning',
+      body: `You have ${count} tasks pending today. That is a lot to handle for just beginning! Try deleting lower priority tasks or rescheduling them to avoid burnout.`,
+    }),
     overdue: (tasks) => ({
       icon: '🚨',
-      title: 'Overdue alert!',
-      body: `You have ${tasks.length} overdue task${tasks.length > 1 ? 's' : ''}. "${tasks[0].title}" was due first. Shall I help you reschedule?`,
+      title: 'Overdue Work Strategy',
+      body: `You have ${tasks.length} overdue task(s). "${tasks[0].title}" needs attention. Recommendation: Try breaking it into 15-minute micro-steps, or defer it to tomorrow if your plate is full. A focused Pomodoro session could knock it out!`,
     }),
     morning: (tasks) => ({
       icon: '🌅',
@@ -225,6 +230,7 @@ const AI = (() => {
     }
 
     if (overdue.length > 0)        return suggestionTemplates.overdue(overdue);
+    if (today.length > 5)          return suggestionTemplates.overloaded(today.length);
     if (hour >= 5  && hour < 10)   return suggestionTemplates.morning(today);
     if (hour >= 20)                 return suggestionTemplates.evening(stats);
     if (pending.length > 0) {
@@ -263,7 +269,7 @@ const AI = (() => {
 
   // ── Chat Responses ──
   const responses = {
-    greet: ["Hello! I'm NEXUS, your AI productivity companion. How can I help you today?", "Hey there! Ready to boost your productivity? What's on your mind?", "Welcome back! Your productivity score is looking sharp. What shall we tackle?"],
+    greet: ["Hello! I'm TACTIC OS, your AI productivity companion. How can I help you today?", "Hey there! Ready to boost your productivity? What's on your mind?", "Welcome back! Your productivity score is looking sharp. What shall we tackle?"],
     addTask: (title) => `Got it! I've added "${title}" to your tasks and auto-assigned priority based on context. Want me to suggest a time slot?`,
     noTasks: ["You're all caught up! 🎉 No pending tasks. Perfect time to plan ahead.", "Clean slate! Want me to suggest some goals or habits to build?"],
     help: `Here's what I can do:\n• **Add tasks**: "Add meeting with team tomorrow at 3pm"\n• **Prioritize**: "What should I focus on?"\n• **Schedule**: "Schedule my tasks for today"\n• **Stats**: "How am I doing?"\n• **Habits**: "Track my morning run"\n• Just ask naturally!`,
@@ -279,16 +285,20 @@ const AI = (() => {
     if (!window.ENV || !window.ENV.GEMINI_API_KEY) {
       throw new Error('No API Key');
     }
-    const taskContext = tasks.filter(t => !t.completed).map(t => `- ${t.title} (Priority: ${t.priority}, Due: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'none'})`).join('\n');
-    const systemPrompt = `You are NEXUS AI, a brilliant and highly productive personal assistant. 
-Here are the user's current pending tasks:
-${taskContext || 'No pending tasks.'}
+    const now = new Date();
+    const twoDaysFromNow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+    const relevantTasks = tasks.filter(t => !t.completed && (!t.dueDate || new Date(t.dueDate) < twoDaysFromNow));
+    const taskContext = relevantTasks.map(t => `- ${t.title} (Priority: ${t.priority}, Due: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'none'})`).join('\n');
+    const systemPrompt = `You are TACTIC, a brilliant and highly productive personal assistant. 
+Here are the user's immediate pending tasks (due today, tomorrow, or overdue):
+${taskContext || 'No immediate pending tasks.'}
     
-The user is asking you a question or making a statement. Reply concisely, conversationally, and use the context of their tasks to give personalized advice. Do not output raw markdown code blocks, just speak naturally like a helpful coach. Use emojis occasionally. Keep responses under 3 paragraphs.
+The user is asking you a question or making a statement. 
+CRITICAL INSTRUCTION: Give highly actionable, highly personalized advice on how to start their tasks TODAY or within 1-2 days. DO NOT mention or worry about tasks due in the distant future. Do not output raw markdown code blocks, just speak naturally like a motivating coach. Keep responses extremely concise (under 2 short paragraphs).
 
 User says: "${prompt}"`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${window.ENV.GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${window.ENV.GEMINI_API_KEY}`;
     const payload = { contents: [{ parts: [{ text: systemPrompt }] }] };
 
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -304,71 +314,72 @@ User says: "${prompt}"`;
     return data.candidates[0].content.parts[0].text;
   }
 
-  async function processInput(input, allTasks) {
+  async function processInput(input, allTasks, bypassRegex = false) {
     const t = input.toLowerCase().trim();
 
-    // Greetings
-    if (/^(hi|hello|hey|greetings|sup|yo)\b/.test(t)) return { type: 'text', text: rand(responses.greet) };
+    if (!bypassRegex) {
+      // Greetings
+      if (/^(hi|hello|hey|greetings|sup|yo)\b/.test(t)) return { type: 'text', text: rand(responses.greet) };
 
-    // Help
-    if (/\bhelp\b/.test(t)) return { type: 'text', text: responses.help };
+      // Help
+      if (/\bhelp\b/.test(t)) return { type: 'text', text: responses.help };
 
-    // Stats / How am I doing
-    if (/\b(stats|statistics|how am i|progress|score|report)\b/.test(t)) {
-      return { type: 'text', text: responses.stats(Tasks.getStats()) };
-    }
+      // Stats / How am I doing
+      if (/\b(stats|statistics|how am i|progress|score|report)\b/.test(t)) {
+        return { type: 'text', text: responses.stats(Tasks.getStats()) };
+      }
 
-    // Prioritize
-    if (/\b(prioritize|priority|focus|what should i|what's next|most important)\b/.test(t)) {
-      const sorted = allTasks.filter(x => !x.completed).sort((a,b) => scorePriority(b) - scorePriority(a));
-      if (!sorted.length) return { type: 'text', text: rand(responses.noTasks) };
-      return { type: 'text', text: responses.prioritize(sorted) };
-    }
+      // Prioritize
+      if (/\b(prioritize|priority|focus|what should i|what's next|most important)\b/.test(t)) {
+        const sorted = allTasks.filter(x => !x.completed).sort((a,b) => scorePriority(b) - scorePriority(a));
+        if (!sorted.length) return { type: 'text', text: rand(responses.noTasks) };
+        return { type: 'text', text: responses.prioritize(sorted) };
+      }
 
-    // Add task (Prioritize this over general keyword queries like 'today')
-    if (/^(add|create|remind|schedule|set|new task|i need to|remind me to)\b/.test(t)) {
-      const parsed = parseCommand(input);
-      if (parsed.title && parsed.title.length > 2) {
-        return { type: 'add_task', data: parsed, text: responses.addTask(parsed.title) };
+      // Add task
+      if (/^(add|create|remind|schedule|set|new task|i need to|remind me to)\b/.test(t)) {
+        const parsed = parseCommand(input);
+        if (parsed.title && parsed.title.length > 2) {
+          return { type: 'add_task', data: parsed, text: responses.addTask(parsed.title) };
+        }
+      }
+
+      // What's due today
+      if (/\b(today|due today|today'?s tasks?)\b/.test(t)) {
+        const today = Tasks.getByFilter('today');
+        if (!today.length) return { type: 'text', text: "Nothing due today! 🎉 Enjoy the free time or get ahead on tomorrow's tasks." };
+        return { type: 'text', text: `You have ${today.length} tasks due today:\n${today.map((x,i) => `${i+1}. ${x.title} [${x.priority}]`).join('\n')}` };
+      }
+
+      // Overdue check
+      if (/\b(overdue|late|missed|behind)\b/.test(t)) {
+        const over = Tasks.getByFilter('overdue');
+        if (!over.length) return { type: 'text', text: "No overdue tasks! You're on track 🎯" };
+        return { type: 'text', text: `⚠️ ${over.length} overdue task${over.length>1?'s':''}:\n${over.map(x=>`• ${x.title}`).join('\n')}\nWant me to reschedule them?` };
+      }
+
+      // Schedule suggestion
+      if (/\b(schedule|when should i|plan|time slot|when to)\b/.test(t)) {
+        const pending = allTasks.filter(x => !x.completed);
+        if (!pending.length) return { type: 'text', text: rand(responses.noTasks) };
+        const top = pending.sort((a,b) => scorePriority(b)-scorePriority(a))[0];
+        const slots = suggestSchedule(top);
+        return { type: 'text', text: `For "${top.title}":\n${responses.schedule(slots)}` };
+      }
+
+      // Motivational
+      if (/\b(motivate?|inspire|quote|boost|energy)\b/.test(t)) {
+        const quotes = [
+          '"The secret of getting ahead is getting started." — Mark Twain',
+          '"Action is the foundational key to all success." — Pablo Picasso',
+          '"You don\'t have to be great to start, but you have to start to be great."',
+          '"Focus on being productive instead of busy." — Tim Ferriss',
+        ];
+        return { type: 'text', text: rand(quotes) };
       }
     }
 
-    // What's due today
-    if (/\b(today|due today|today'?s tasks?)\b/.test(t)) {
-      const today = Tasks.getByFilter('today');
-      if (!today.length) return { type: 'text', text: "Nothing due today! 🎉 Enjoy the free time or get ahead on tomorrow's tasks." };
-      return { type: 'text', text: `You have ${today.length} tasks due today:\n${today.map((x,i) => `${i+1}. ${x.title} [${x.priority}]`).join('\n')}` };
-    }
-
-    // Overdue check
-    if (/\b(overdue|late|missed|behind)\b/.test(t)) {
-      const over = Tasks.getByFilter('overdue');
-      if (!over.length) return { type: 'text', text: "No overdue tasks! You're on track 🎯" };
-      return { type: 'text', text: `⚠️ ${over.length} overdue task${over.length>1?'s':''}:\n${over.map(x=>`• ${x.title}`).join('\n')}\nWant me to reschedule them?` };
-    }
-
-    // Schedule suggestion
-    if (/\b(schedule|when should i|plan|time slot|when to)\b/.test(t)) {
-      const pending = allTasks.filter(x => !x.completed);
-      if (!pending.length) return { type: 'text', text: rand(responses.noTasks) };
-      const top = pending.sort((a,b) => scorePriority(b)-scorePriority(a))[0];
-      const slots = suggestSchedule(top);
-      return { type: 'text', text: `For "${top.title}":\n${responses.schedule(slots)}` };
-    }
-
-
-    // Motivational
-    if (/\b(motivate?|inspire|quote|boost|energy)\b/.test(t)) {
-      const quotes = [
-        '"The secret of getting ahead is getting started." — Mark Twain',
-        '"Action is the foundational key to all success." — Pablo Picasso',
-        '"You don\'t have to be great to start, but you have to start to be great."',
-        '"Focus on being productive instead of busy." — Tim Ferriss',
-      ];
-      return { type: 'text', text: rand(quotes) };
-    }
-
-    // Fallback to Gemini API for conversational queries
+    // Proceed to Gemini
     try {
       const geminiResponse = await askGemini(input, allTasks);
       return { type: 'text', text: geminiResponse };

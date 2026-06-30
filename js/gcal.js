@@ -17,11 +17,11 @@ const GOOGLE_API_KEY   = window.ENV.GOOGLE_API_KEY;
 
 const GCAL_SCOPES      = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events';
 const GCAL_DISCOVERY   = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
-const NEXUS_CAL_NAME   = 'NEXUS AI Tasks'; // Name of the calendar we create
+const NEXUS_CAL_NAME   = 'TACTIC Tasks'; // Name of the calendar we create
 
 const GCal = (() => {
   let gapiReady   = false;
-  let calendarId  = null; // ID of the NEXUS calendar in Google Calendar
+  let calendarId  = null; // ID of the TACTIC calendar in Google Calendar
   let isEnabled   = false;
   let initError   = null;
 
@@ -45,6 +45,8 @@ const GCal = (() => {
         if (token) {
           gapi.client.setToken({ access_token: token });
           isEnabled = true;
+          cachedCalsToFetch = null;
+          for (const key in eventsCache) delete eventsCache[key];
           ensureNexusCalendar();
           updateCalSyncUI(true);
         }
@@ -72,6 +74,8 @@ const GCal = (() => {
 
       gapi.client.setToken({ access_token: token });
       isEnabled = true;
+      cachedCalsToFetch = null;
+      for (const key in eventsCache) delete eventsCache[key];
       await ensureNexusCalendar();
       updateCalSyncUI(true);
       showToast('Google Calendar connected! ✅', 'success');
@@ -87,35 +91,17 @@ const GCal = (() => {
     }
     isEnabled = false;
     calendarId = null;
+    cachedCalsToFetch = null;
+    for (const key in eventsCache) delete eventsCache[key];
     updateCalSyncUI(false);
     showToast('Google Calendar disconnected.', 'info');
   }
 
-  /* ── Ensure "NEXUS AI Tasks" calendar exists ── */
+  /* ── Setup Google Calendar Target ── */
   async function ensureNexusCalendar() {
     if (!isEnabled) return;
-    const savedId = localStorage.getItem('nexus_gcal_id');
-    if (savedId) { calendarId = savedId; return; }
-
-    try {
-      // List existing calendars
-      const res = await gapi.client.calendar.calendarList.list();
-      const existing = res.result.items.find(c => c.summary === NEXUS_CAL_NAME);
-      if (existing) {
-        calendarId = existing.id;
-      } else {
-        // Create NEXUS calendar
-        const created = await gapi.client.calendar.calendars.insert({
-          resource: { summary: NEXUS_CAL_NAME, description: 'Tasks synced from NEXUS AI Productivity Companion', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }
-        });
-        calendarId = created.result.id;
-        showToast('Created "NEXUS AI Tasks" calendar in Google Calendar 📅', 'success');
-      }
-      localStorage.setItem('nexus_gcal_id', calendarId);
-      console.log('[GCal] Calendar ID:', calendarId);
-    } catch (err) {
-      console.error('[GCal] Calendar setup error:', err);
-    }
+    calendarId = 'primary';
+    console.log('[GCal] Calendar ID set to primary');
   }
 
   /* ── Add task → Google Calendar event ── */
@@ -127,7 +113,7 @@ const GCal = (() => {
 
       const event = {
         summary:     task.title,
-        description: task.desc || `Category: ${task.category}\nPriority: ${task.priority}\nFrom NEXUS AI`,
+        description: task.desc || `Category: ${task.category}\nPriority: ${task.priority}\nFrom TACTIC`,
         start: { dateTime: start.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
         end:   { dateTime: end.toISOString(),   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
         colorId:    priorityToColorId(task.priority),
@@ -213,9 +199,13 @@ const GCal = (() => {
       // 1. Get list of calendars (Primary + Holidays) (Cached)
       if (!cachedCalsToFetch) {
         const calListRes = await gapi.client.calendar.calendarList.list();
+        console.log('[GCal] Raw calendar list from Google API:', calListRes.result.items);
         cachedCalsToFetch = calListRes.result.items.filter(c => 
-          c.primary || (c.id && c.id.includes('holiday'))
+          c.primary || 
+          (c.id && c.id.toLowerCase().includes('holiday')) || 
+          (c.summary && c.summary.toLowerCase().includes('holiday'))
         );
+        console.log('[GCal] Filtered calendars to sync:', cachedCalsToFetch);
       }
 
       let allEvents = [];
@@ -232,13 +222,15 @@ const GCal = (() => {
             maxResults:   50,
           });
           const items = res.result.items || [];
-          const mapped = items.map(e => ({
-            id: e.id,
-            title: e.summary,
-            start: e.start.dateTime || e.start.date, // date is for all-day events like holidays
-            isExternal: true,
-            isHoliday: cal.id.includes('holiday')
-          }));
+          const mapped = items
+            .filter(e => !(e.extendedProperties && e.extendedProperties.private && e.extendedProperties.private.nexusTaskId))
+            .map(e => ({
+              id: e.id,
+              title: e.summary,
+              start: e.start.dateTime || e.start.date, // date is for all-day events like holidays
+              isExternal: true,
+              isHoliday: (cal.id && cal.id.toLowerCase().includes('holiday')) || (cal.summary && cal.summary.toLowerCase().includes('holiday'))
+            }));
           allEvents = allEvents.concat(mapped);
         } catch(e) { console.warn('Failed to fetch cal:', cal.id); }
       }));
@@ -255,7 +247,8 @@ const GCal = (() => {
       eventsCache[monthKey] = allEvents; // Save to cache
       return allEvents;
     } catch (err) {
-      console.warn('[GCal] getExternalEvents error:', err);
+      const details = err?.result?.error?.message || err?.message || JSON.stringify(err);
+      console.warn('[GCal] getExternalEvents error:', details, err);
       return [];
     }
   }
@@ -269,6 +262,7 @@ const GCal = (() => {
       const eventId = await addEvent(task);
       if (eventId) {
         Tasks.update(task.id, { gcalEventId: eventId });
+        if (typeof DB !== 'undefined') DB.updateTask(task.id, { gcalEventId: eventId });
         synced++;
       }
     }

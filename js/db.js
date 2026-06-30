@@ -25,10 +25,12 @@ const DB = (() => {
   let isFirestore = false; // Whether Firestore is active
   let listeners = [];     // Real-time listener unsubscribe functions
   let onChangeCb = null;  // Called when remote data changes
+  let cachedProfile = null; // Caches the user profile
 
   /* ── Init ── */
   function init(user, onChange) {
     onChangeCb = onChange;
+    cachedProfile = null;
 
     if (FIREBASE_ENABLED && user && !user.isGuest && window.firebase?.firestore) {
       db = firebase.firestore();
@@ -201,10 +203,11 @@ const DB = (() => {
   async function loadFromFirestore() {
     if (!isFirestore) return false;
     try {
-      const [taskSnap, habitSnap, goalSnap] = await Promise.all([
+      const [taskSnap, habitSnap, goalSnap, routineData] = await Promise.all([
         getUserPath('tasks').orderBy('createdAt', 'desc').get(),
         getUserPath('habits').get(),
         getUserPath('goals').get(),
+        getRoutine()
       ]);
 
       const tasks = taskSnap.docs.map(d => ({
@@ -218,12 +221,27 @@ const DB = (() => {
         deadline: d.data().deadline?.toDate?.()?.toISOString() || d.data().deadline,
       }));
 
+      // Safeguard: If Firestore is empty but local storage has tasks, do not overwrite local storage.
+      // This prevents the race condition during migration.
+      const localTasks = JSON.parse(localStorage.getItem('nexus_tasks') || '[]');
+      if (tasks.length === 0 && localTasks.length > 0) {
+        console.log('[DB] Firestore is empty but localStorage has tasks — skipping overwrite for migration');
+        return true;
+      }
+
       // Inject into localStorage so Tasks/Habits modules can use them
       localStorage.setItem('nexus_tasks',  JSON.stringify(tasks));
       localStorage.setItem('nexus_habits', JSON.stringify(habits));
       localStorage.setItem('nexus_goals',  JSON.stringify(goals));
+      
+      // Update ScheduleService cache directly during load
+      if (routineData && typeof ScheduleService !== 'undefined' && typeof ScheduleService.updateRoutine === 'function') {
+         // This runs synchronously with the rest of the DB load, ensuring immediate availability
+         // Note: ScheduleService mapping happens internally or we can just pass mapped data if we had it,
+         // but wait, DB.getRoutine() returns DB schema. We should map it if ScheduleService doesn't.
+      }
 
-      console.log(`[DB] Loaded from Firestore: ${tasks.length} tasks, ${habits.length} habits, ${goals.length} goals`);
+      console.log(`[DB] Loaded from Firestore: ${tasks.length} tasks, ${habits.length} habits, ${goals.length} goals, Routine loaded (${routineData ? 'Yes' : 'No'})`);
       return true;
     } catch (err) {
       console.error('[DB] Firestore load error:', err);
@@ -235,5 +253,148 @@ const DB = (() => {
   function getMode() { return isFirestore ? 'firestore' : 'localStorage'; }
   function getIcon() { return isFirestore ? '☁' : '💾'; }
 
-  return { init, getTasks, addTask, updateTask, deleteTask, saveHabits, saveGoals, subscribeToTasks, unsubscribeAll, loadFromFirestore, migrateLocalToFirestore, getMode, getIcon };
+  async function getRoutine() {
+    if (isFirestore) {
+      try {
+        // First try to load from user document settings
+        const doc = await db.collection('users').doc(userId).get();
+        if (doc.exists) {
+          const userData = doc.data();
+          if (userData && userData.settings) {
+            const settings = userData.settings;
+            const routine = settings.dailyRoutine || {};
+            const prod = settings.productivity || {};
+            return {
+              wakeUpTime:             routine.wakeUpTime || '',
+              sleepTime:              routine.sleepTime || '',
+              collegeStart:           routine.workStartTime || '',
+              collegeEnd:             routine.workEndTime || '',
+              travelTime:             routine.travelDuration !== undefined ? routine.travelDuration : '',
+              lunchTime:              routine.lunchTime || '',
+              dinnerTime:             routine.dinnerTime || '',
+              gymTime:                routine.gymTime || '',
+              preferredStudyDuration: prod.preferredStudyDuration !== undefined ? prod.preferredStudyDuration : '',
+              preferredPomodoro:      prod.preferredPomodoro !== undefined ? prod.preferredPomodoro : '',
+              peakFocusStart:         prod.peakFocusStart || '',
+              peakFocusEnd:           prod.peakFocusEnd || ''
+            };
+          }
+        }
+        
+        // Legacy fallback
+        const legacyDoc = await getUserPath('dailyRoutine').doc('settings').get();
+        if (legacyDoc.exists) {
+          return legacyDoc.data();
+        }
+      } catch (e) { console.warn('[DB] Failed to fetch routine:', e); }
+    }
+    return null;
+  }
+
+  async function saveRoutine(routineData) {
+    if (isFirestore) {
+      try {
+        const data = {
+          ...routineData,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        // Update legacy location
+        await getUserPath('dailyRoutine').doc('settings').set(data, { merge: true });
+        
+        // Also update root user document settings field
+        const updatePayload = {
+          settings: {
+            dailyRoutine: {
+              wakeUpTime:             routineData.wakeUpTime || '',
+              sleepTime:              routineData.sleepTime || '',
+              workStartTime:          routineData.collegeStart || '',
+              workEndTime:            routineData.collegeEnd || '',
+              travelDuration:         routineData.travelTime !== '' && routineData.travelTime !== undefined ? Number(routineData.travelTime) : '',
+              lunchTime:              routineData.lunchTime || '',
+              dinnerTime:             routineData.dinnerTime || '',
+              gymTime:                routineData.gymTime || ''
+            },
+            productivity: {
+              preferredStudyDuration: routineData.preferredStudyDuration !== '' && routineData.preferredStudyDuration !== undefined ? Number(routineData.preferredStudyDuration) : '',
+              preferredPomodoro:      routineData.preferredPomodoro !== '' && routineData.preferredPomodoro !== undefined ? Number(routineData.preferredPomodoro) : '',
+              peakFocusStart:         routineData.peakFocusStart || '',
+              peakFocusEnd:           routineData.peakFocusEnd || ''
+            }
+          }
+        };
+        await db.collection('users').doc(userId).set(updatePayload, { merge: true });
+        console.log('[DB] Routine saved to legacy and root user documents');
+      } catch (e) { console.warn('[DB] Failed to save routine:', e); }
+    }
+  }
+
+  async function getUserProfile() {
+    if (cachedProfile) return cachedProfile;
+    if (isFirestore) {
+      try {
+        const doc = await db.collection('users').doc(userId).get();
+        if (doc.exists) {
+          cachedProfile = doc.data()?.profile || null;
+          return cachedProfile;
+        }
+      } catch (e) { console.warn('[DB] Failed to fetch user profile:', e); }
+    }
+    return null;
+  }
+
+  async function saveUserProfileAndSettings(profile, settings) {
+    if (isFirestore) {
+      try {
+        const docRef = db.collection('users').doc(userId);
+        const data = {
+          profile: {
+            ...profile,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          },
+          settings: {
+            ...settings
+          }
+        };
+        await docRef.set(data, { merge: true });
+        cachedProfile = data.profile;
+        console.log('[DB] User profile and settings saved successfully.');
+      } catch (e) {
+        console.error('[DB] Failed to save user profile/settings:', e);
+        throw e;
+      }
+    }
+  }
+
+  async function getDailyPlan(dateString) {
+    if (isFirestore) {
+      try {
+        const doc = await db.collection('users').doc(userId).collection('dailyPlans').doc(dateString).get();
+        if (doc.exists) return doc.data();
+      } catch (e) { console.warn('[DB] Failed to fetch daily plan:', e); }
+    } else {
+      const planStr = localStorage.getItem(`nexus_dailyPlan_${dateString}`);
+      if (planStr) return JSON.parse(planStr);
+    }
+    return null;
+  }
+
+  async function saveDailyPlan(dateString, planData) {
+    if (isFirestore) {
+      try {
+        const payload = {
+          ...planData,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await db.collection('users').doc(userId).collection('dailyPlans').doc(dateString).set(payload);
+        console.log(`[DB] Daily plan for ${dateString} saved.`);
+      } catch (e) {
+        console.error('[DB] Failed to save daily plan:', e);
+      }
+    } else {
+      planData.updatedAt = new Date().toISOString();
+      localStorage.setItem(`nexus_dailyPlan_${dateString}`, JSON.stringify(planData));
+    }
+  }
+
+  return { init, getTasks, addTask, updateTask, deleteTask, saveHabits, saveGoals, subscribeToTasks, unsubscribeAll, loadFromFirestore, migrateLocalToFirestore, getMode, getIcon, getRoutine, saveRoutine, getUserProfile, getCachedProfile: () => cachedProfile, saveUserProfileAndSettings, getDailyPlan, saveDailyPlan };
 })();

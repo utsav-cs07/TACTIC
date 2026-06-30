@@ -67,16 +67,25 @@ const Voice = (() => {
 
   function updateVoiceBtn(active) {
     const btn = document.getElementById('voice-btn');
-    const indicator = document.getElementById('ai-listening-indicator');
+    const input = document.getElementById('ai-chat-input');
     if (!btn) return;
     if (active) {
       btn.style.color = '#ff3366';
       btn.style.textShadow = '0 0 10px rgba(255,51,102,0.8)';
-      if (indicator) indicator.style.display = 'block';
+      if (input) {
+        input.dataset.originalPlaceholder = input.placeholder;
+        input.placeholder = '🎙️ Listening...';
+        input.classList.add('listening-active');
+      }
     } else {
       btn.style.color = '';
       btn.style.textShadow = '';
-      if (indicator) indicator.style.display = 'none';
+      if (input) {
+        if (input.dataset.originalPlaceholder) {
+          input.placeholder = input.dataset.originalPlaceholder;
+        }
+        input.classList.remove('listening-active');
+      }
     }
   }
 

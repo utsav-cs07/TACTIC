@@ -15,6 +15,16 @@ const Auth = (() => {
   function init(onAuthChange) {
     onAuthChangeCb = onAuthChange;
 
+    if (window.isDemoMode) {
+      // In Demo Mode, immediately enter as guest, skip Firebase, skip splash screen
+      currentUser = { uid: 'local-guest', displayName: 'Demo User', email: '', photoURL: null, isGuest: true };
+      updateUI();
+      const splash = document.getElementById('splash-screen');
+      if (splash) splash.style.display = 'none';
+      if (onAuthChangeCb) onAuthChangeCb(currentUser);
+      return;
+    }
+
     if (!FIREBASE_ENABLED) {
       // Run as guest (localStorage mode)
       currentUser = { uid: 'local-guest', displayName: 'Guest User', email: '', photoURL: null, isGuest: true };
@@ -27,9 +37,15 @@ const Auth = (() => {
     firebase.auth().onAuthStateChanged((user) => {
       currentUser = user;
       updateUI();
+      const splash = document.getElementById('splash-screen');
       if (user) {
-        const splash = document.getElementById('splash-screen');
         if (splash) splash.style.display = 'none';
+      } else {
+        // User is not signed in
+        const isGuest = localStorage.getItem('nexus_guest_mode') === 'true';
+        if (!isGuest && splash) {
+          splash.style.display = 'flex';
+        }
       }
       if (onAuthChangeCb) onAuthChangeCb(user);
     });
@@ -42,8 +58,10 @@ const Auth = (() => {
     }
     try {
       const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/calendar');
       provider.addScope('https://www.googleapis.com/auth/calendar.events');
       provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+      provider.setCustomParameters({ prompt: 'select_account consent' });
       
       const result = await firebase.auth().signInWithPopup(provider);
       
@@ -57,7 +75,7 @@ const Auth = (() => {
             GCal.init();
             // Automatically sync all pending tasks to calendar after init
             setTimeout(() => {
-              if (GCal.isConnected() && window.Tasks) GCal.syncAllTasks(Tasks.getAll());
+              if (GCal.isConnected() && typeof Tasks !== 'undefined') GCal.syncAllTasks(Tasks.getAll());
             }, 2000);
           }, 500);
         }
@@ -76,8 +94,10 @@ const Auth = (() => {
     if (!FIREBASE_ENABLED) return null;
     try {
       const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/calendar');
       provider.addScope('https://www.googleapis.com/auth/calendar.events');
       provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+      provider.setCustomParameters({ prompt: 'select_account consent' });
       
       const result = await firebase.auth().signInWithPopup(provider);
       const credential = result.credential;
@@ -96,14 +116,16 @@ const Auth = (() => {
   }
 
   async function signOut() {
-    if (!FIREBASE_ENABLED) return;
     try {
-      await firebase.auth().signOut();
+      if (typeof firebase !== 'undefined' && firebase.auth) {
+        await firebase.auth().signOut();
+      }
+    } catch (err) {
+      console.error('Sign-out error:', err);
+    } finally {
       sessionStorage.removeItem('nexus_goog_token');
       localStorage.clear(); // Wipe sensitive data from screen
       location.reload();    // Hard reset UI
-    } catch (err) {
-      console.error('Sign-out error:', err);
     }
   }
 
@@ -123,8 +145,12 @@ const Auth = (() => {
 
     if (currentUser && !currentUser.isGuest) {
       if (avatar) {
-        if (currentUser.photoURL) avatar.innerHTML = `<img src="${currentUser.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" alt="Profile">`;
-        else avatar.textContent = (currentUser.displayName || 'U')[0].toUpperCase();
+        if (currentUser.photoURL) {
+          const fallback = (currentUser.displayName || currentUser.email || 'U')[0].toUpperCase();
+          avatar.innerHTML = `<img src="${currentUser.photoURL}" referrerpolicy="no-referrer" style="width:100%;height:100%;border-radius:50%;object-fit:cover" alt="Profile" onerror="this.onerror=null; this.outerHTML='${fallback}'">`;
+        } else {
+          avatar.textContent = (currentUser.displayName || currentUser.email || 'U')[0].toUpperCase();
+        }
       }
       if (userNameEl) userNameEl.textContent = currentUser.displayName || currentUser.email;
       if (loginBtn) loginBtn.style.display = 'none';
@@ -168,7 +194,7 @@ const Auth = (() => {
     
     // Seed 2 default tasks if empty for Hackathon Judges
     setTimeout(() => {
-      if (window.Tasks && window.DB && Tasks.getAll().length === 0) {
+      if (typeof Tasks !== 'undefined' && typeof DB !== 'undefined' && Tasks.getAll().length === 0) {
         const t1 = Tasks.create({
           title: 'Review NEXUS AI Architecture',
           desc: 'Explore the source code, check the AI parsing logic in parser.js, and evaluate the prompt engineering.',
@@ -187,7 +213,7 @@ const Auth = (() => {
         });
         DB.addTask(t1);
         DB.addTask(t2);
-        if (window.App) {
+        if (typeof App !== 'undefined') {
           App.renderCurrentView();
           App.updateBadges();
         }
